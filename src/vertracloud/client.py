@@ -16,7 +16,7 @@ from .sse import SseStream
 from .transport import Response, Transport, UrllibTransport
 from .types import JsonValue
 
-__version__ = "0.1.0"  # x-release-please-version
+__version__ = "0.1.1"  # x-release-please-version
 
 DEFAULT_BASE_URL = "https://api.vertracloud.app"
 DEFAULT_TIMEOUT = 30.0

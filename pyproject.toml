@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vertracloud-api"
-version = "0.1.0"
+version = "0.1.1"
 description = "Official Python SDK for the public API of Vertra Cloud, a Brazilian application hosting platform (PaaS)."
 readme = "README.md"
 license = "MIT"

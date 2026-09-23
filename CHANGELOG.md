@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/vertracloud/sdk-api-py/compare/v0.1.0...v0.1.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* drop resource-organization segment from folder and favorite routes ([2836fec](https://github.com/vertracloud/sdk-api-py/commit/2836fec743039789f2bdbc62f80db4b9cae23563))
+
 ## 0.1.0 (2026-09-23)
 
 
