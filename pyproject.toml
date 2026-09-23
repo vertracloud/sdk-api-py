@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vertracloud-api"
+version = "0.1.0"
+description = "Official Python SDK for the public API of Vertra Cloud, a Brazilian application hosting platform (PaaS)."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Vertra Cloud" }]
+dependencies = []
+
+[project.urls]
+Homepage = "https://vertracloud.app"
+Documentation = "https://docs.vertracloud.app/sdks"
+Repository = "https://github.com/vertracloud/sdk-api-py"
+Issues = "https://github.com/vertracloud/sdk-api-py/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "build>=1.2"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vertracloud"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+packages = ["vertracloud"]
+mypy_path = "src"
+
+# `resources/*` returns the `Any` from `request_json`/`request_multipart` already annotated
+# with the contract's TypedDict/type — there's no real value in requiring `cast()` on every call.
+[[tool.mypy.overrides]]
+module = "vertracloud.resources.*"
+warn_return_any = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

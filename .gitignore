@@ -1,0 +1,14 @@
+.venv
+__pycache__
+dist
+build
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.env*
+# Local AI-agent guidance (never published)
+AGENTS.md
+AGENT.md
+CLAUDE.md
+.claude/
