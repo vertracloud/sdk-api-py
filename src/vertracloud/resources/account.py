@@ -40,15 +40,11 @@ class AccountFoldersResource:
 
     def update(self, folder_id: str, body: UpdateFolderBody) -> APIWorkspaceResourceFolder:
         """PATCH /v1/users/me/folders/:folder_id — scope `account:write`."""
-        return self._c.request_json(
-            "PATCH", f"/v1/users/me/folders/{encode_path_param(folder_id)}", json_body=body
-        )
+        return self._c.request_json("PATCH", f"/v1/users/me/folders/{encode_path_param(folder_id)}", json_body=body)
 
     def delete(self, folder_id: str) -> None:
         """DELETE /v1/users/me/folders/:folder_id — scope `account:write`."""
-        return self._c.request_json(
-            "DELETE", f"/v1/users/me/folders/{encode_path_param(folder_id)}"
-        )
+        return self._c.request_json("DELETE", f"/v1/users/me/folders/{encode_path_param(folder_id)}")
 
     def add_resource(
         self, folder_id: str, resource_type: str, resource_id: str, *, position: int | None = None
@@ -76,19 +72,13 @@ class AccountFavoritesResource:
 
     def add(self, resource_type: str, resource_id: str, *, position: int | None = None) -> None:
         """PUT /v1/users/me/favorites/:resource_type/:resource_id — `account:write`."""
-        path = (
-            f"/v1/users/me/favorites/{encode_path_param(resource_type)}"
-            f"/{encode_path_param(resource_id)}"
-        )
+        path = f"/v1/users/me/favorites/{encode_path_param(resource_type)}/{encode_path_param(resource_id)}"
         body = {"position": position} if position is not None else {}
         return self._c.request_json("PUT", path, json_body=body)
 
     def remove(self, resource_type: str, resource_id: str) -> None:
         """DELETE .../favorites/:resource_type/:resource_id — scope `account:write`."""
-        path = (
-            f"/v1/users/me/favorites/{encode_path_param(resource_type)}"
-            f"/{encode_path_param(resource_id)}"
-        )
+        path = f"/v1/users/me/favorites/{encode_path_param(resource_type)}/{encode_path_param(resource_id)}"
         return self._c.request_json("DELETE", path)
 
 

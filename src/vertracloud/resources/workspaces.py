@@ -123,24 +123,16 @@ class WorkspaceFoldersResource:
 
     def create(self, workspace_id: str, body: CreateFolderBody) -> APIWorkspaceResourceFolder:
         """POST /v1/workspaces/:id/folders — scope `workspaces:write`."""
-        return self._c.request_json(
-            "POST", f"/v1/workspaces/{encode_path_param(workspace_id)}/folders", json_body=body
-        )
+        return self._c.request_json("POST", f"/v1/workspaces/{encode_path_param(workspace_id)}/folders", json_body=body)
 
     def update(self, workspace_id: str, folder_id: str, body: UpdateFolderBody) -> APIWorkspaceResourceFolder:
         """PATCH .../folders/:folder_id — scope `workspaces:write`."""
-        path = (
-            f"/v1/workspaces/{encode_path_param(workspace_id)}/folders"
-            f"/{encode_path_param(folder_id)}"
-        )
+        path = f"/v1/workspaces/{encode_path_param(workspace_id)}/folders/{encode_path_param(folder_id)}"
         return self._c.request_json("PATCH", path, json_body=body)
 
     def delete(self, workspace_id: str, folder_id: str) -> None:
         """DELETE .../folders/:folder_id — scope `workspaces:write`."""
-        path = (
-            f"/v1/workspaces/{encode_path_param(workspace_id)}/folders"
-            f"/{encode_path_param(folder_id)}"
-        )
+        path = f"/v1/workspaces/{encode_path_param(workspace_id)}/folders/{encode_path_param(folder_id)}"
         return self._c.request_json("DELETE", path)
 
     def add_resource(
