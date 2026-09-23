@@ -35,19 +35,19 @@ class AccountFoldersResource:
         self._c = client
 
     def create(self, body: CreateFolderBody) -> APIWorkspaceResourceFolder:
-        """POST /v1/users/me/resource-organization/folders — scope `account:write`."""
-        return self._c.request_json("POST", "/v1/users/me/resource-organization/folders", json_body=body)
+        """POST /v1/users/me/folders — scope `account:write`."""
+        return self._c.request_json("POST", "/v1/users/me/folders", json_body=body)
 
     def update(self, folder_id: str, body: UpdateFolderBody) -> APIWorkspaceResourceFolder:
-        """PATCH /v1/users/me/resource-organization/folders/:folder_id — scope `account:write`."""
+        """PATCH /v1/users/me/folders/:folder_id — scope `account:write`."""
         return self._c.request_json(
-            "PATCH", f"/v1/users/me/resource-organization/folders/{encode_path_param(folder_id)}", json_body=body
+            "PATCH", f"/v1/users/me/folders/{encode_path_param(folder_id)}", json_body=body
         )
 
     def delete(self, folder_id: str) -> None:
-        """DELETE /v1/users/me/resource-organization/folders/:folder_id — scope `account:write`."""
+        """DELETE /v1/users/me/folders/:folder_id — scope `account:write`."""
         return self._c.request_json(
-            "DELETE", f"/v1/users/me/resource-organization/folders/{encode_path_param(folder_id)}"
+            "DELETE", f"/v1/users/me/folders/{encode_path_param(folder_id)}"
         )
 
     def add_resource(
@@ -55,7 +55,7 @@ class AccountFoldersResource:
     ) -> APIWorkspaceResourceFolder:
         """PUT .../folders/:folder_id/resources/:resource_type/:resource_id — scope `account:write`."""
         path = (
-            f"/v1/users/me/resource-organization/folders/{encode_path_param(folder_id)}"
+            f"/v1/users/me/folders/{encode_path_param(folder_id)}"
             f"/resources/{encode_path_param(resource_type)}/{encode_path_param(resource_id)}"
         )
         body = {"position": position} if position is not None else {}
@@ -64,7 +64,7 @@ class AccountFoldersResource:
     def remove_resource(self, folder_id: str, resource_type: str, resource_id: str) -> None:
         """DELETE .../folders/:folder_id/resources/:resource_type/:resource_id — scope `account:write`."""
         path = (
-            f"/v1/users/me/resource-organization/folders/{encode_path_param(folder_id)}"
+            f"/v1/users/me/folders/{encode_path_param(folder_id)}"
             f"/resources/{encode_path_param(resource_type)}/{encode_path_param(resource_id)}"
         )
         return self._c.request_json("DELETE", path)
@@ -75,9 +75,9 @@ class AccountFavoritesResource:
         self._c = client
 
     def add(self, resource_type: str, resource_id: str, *, position: int | None = None) -> None:
-        """PUT /v1/users/me/resource-organization/favorites/:resource_type/:resource_id — `account:write`."""
+        """PUT /v1/users/me/favorites/:resource_type/:resource_id — `account:write`."""
         path = (
-            f"/v1/users/me/resource-organization/favorites/{encode_path_param(resource_type)}"
+            f"/v1/users/me/favorites/{encode_path_param(resource_type)}"
             f"/{encode_path_param(resource_id)}"
         )
         body = {"position": position} if position is not None else {}
@@ -86,7 +86,7 @@ class AccountFavoritesResource:
     def remove(self, resource_type: str, resource_id: str) -> None:
         """DELETE .../favorites/:resource_type/:resource_id — scope `account:write`."""
         path = (
-            f"/v1/users/me/resource-organization/favorites/{encode_path_param(resource_type)}"
+            f"/v1/users/me/favorites/{encode_path_param(resource_type)}"
             f"/{encode_path_param(resource_id)}"
         )
         return self._c.request_json("DELETE", path)

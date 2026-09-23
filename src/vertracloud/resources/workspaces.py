@@ -122,23 +122,23 @@ class WorkspaceFoldersResource:
         self._c = client
 
     def create(self, workspace_id: str, body: CreateFolderBody) -> APIWorkspaceResourceFolder:
-        """POST /v1/workspaces/:id/resource-organization/folders — scope `workspaces:write`."""
+        """POST /v1/workspaces/:id/folders — scope `workspaces:write`."""
         return self._c.request_json(
-            "POST", f"/v1/workspaces/{encode_path_param(workspace_id)}/resource-organization/folders", json_body=body
+            "POST", f"/v1/workspaces/{encode_path_param(workspace_id)}/folders", json_body=body
         )
 
     def update(self, workspace_id: str, folder_id: str, body: UpdateFolderBody) -> APIWorkspaceResourceFolder:
-        """PATCH .../resource-organization/folders/:folder_id — scope `workspaces:write`."""
+        """PATCH .../folders/:folder_id — scope `workspaces:write`."""
         path = (
-            f"/v1/workspaces/{encode_path_param(workspace_id)}/resource-organization/folders"
+            f"/v1/workspaces/{encode_path_param(workspace_id)}/folders"
             f"/{encode_path_param(folder_id)}"
         )
         return self._c.request_json("PATCH", path, json_body=body)
 
     def delete(self, workspace_id: str, folder_id: str) -> None:
-        """DELETE .../resource-organization/folders/:folder_id — scope `workspaces:write`."""
+        """DELETE .../folders/:folder_id — scope `workspaces:write`."""
         path = (
-            f"/v1/workspaces/{encode_path_param(workspace_id)}/resource-organization/folders"
+            f"/v1/workspaces/{encode_path_param(workspace_id)}/folders"
             f"/{encode_path_param(folder_id)}"
         )
         return self._c.request_json("DELETE", path)
@@ -154,7 +154,7 @@ class WorkspaceFoldersResource:
     ) -> APIWorkspaceResourceFolder:
         """PUT .../folders/:folder_id/resources/:resource_type/:resource_id — scope `workspaces:write`."""
         path = (
-            f"/v1/workspaces/{encode_path_param(workspace_id)}/resource-organization/folders/{encode_path_param(folder_id)}"
+            f"/v1/workspaces/{encode_path_param(workspace_id)}/folders/{encode_path_param(folder_id)}"
             f"/resources/{encode_path_param(resource_type)}/{encode_path_param(resource_id)}"
         )
         body = {"position": position} if position is not None else {}
@@ -163,7 +163,7 @@ class WorkspaceFoldersResource:
     def remove_resource(self, workspace_id: str, folder_id: str, resource_type: str, resource_id: str) -> None:
         """DELETE .../folders/:folder_id/resources/:resource_type/:resource_id — scope `workspaces:write`."""
         path = (
-            f"/v1/workspaces/{encode_path_param(workspace_id)}/resource-organization/folders/{encode_path_param(folder_id)}"
+            f"/v1/workspaces/{encode_path_param(workspace_id)}/folders/{encode_path_param(folder_id)}"
             f"/resources/{encode_path_param(resource_type)}/{encode_path_param(resource_id)}"
         )
         return self._c.request_json("DELETE", path)
@@ -174,18 +174,18 @@ class WorkspaceFavoritesResource:
         self._c = client
 
     def add(self, workspace_id: str, resource_type: str, resource_id: str, *, position: int | None = None) -> None:
-        """PUT .../resource-organization/favorites/:resource_type/:resource_id — scope `workspaces:write`."""
+        """PUT .../favorites/:resource_type/:resource_id — scope `workspaces:write`."""
         path = (
-            f"/v1/workspaces/{encode_path_param(workspace_id)}/resource-organization/favorites"
+            f"/v1/workspaces/{encode_path_param(workspace_id)}/favorites"
             f"/{encode_path_param(resource_type)}/{encode_path_param(resource_id)}"
         )
         body = {"position": position} if position is not None else {}
         return self._c.request_json("PUT", path, json_body=body)
 
     def remove(self, workspace_id: str, resource_type: str, resource_id: str) -> None:
-        """DELETE .../resource-organization/favorites/:resource_type/:resource_id — scope `workspaces:write`."""
+        """DELETE .../favorites/:resource_type/:resource_id — scope `workspaces:write`."""
         path = (
-            f"/v1/workspaces/{encode_path_param(workspace_id)}/resource-organization/favorites"
+            f"/v1/workspaces/{encode_path_param(workspace_id)}/favorites"
             f"/{encode_path_param(resource_type)}/{encode_path_param(resource_id)}"
         )
         return self._c.request_json("DELETE", path)
