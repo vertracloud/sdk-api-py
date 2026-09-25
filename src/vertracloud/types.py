@@ -40,7 +40,6 @@ class CreateAppBody(TypedDict, total=False):
 
     snapshot_id: str
     memory: int
-    autorestart: bool
     start: str
     build: str
     main: str
@@ -57,7 +56,6 @@ class UpdateAppConfigBody(TypedDict, total=False):
     description: str | None
     main_file: str
     version: str
-    auto_restart: bool
     start_command: str | None
     build_command: str | None
     ram: int
@@ -241,7 +239,6 @@ class _APIApplicationRequired(TypedDict):
     updated_at: str
     main_file: str
     version: str
-    auto_restart: bool
     start_command: str | None
     build_command: str | None
     offline_since: str | None

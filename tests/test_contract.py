@@ -301,10 +301,3 @@ def test_apps_envs_set_accepts_list() -> None:
     assert _body(call) == body
 
 
-def test_apps_create_multipart_booleans_serialized_as_true_false_strings() -> None:
-    client, transport = _client()
-    client.apps.create({"name": "x", "autorestart": True}, file=b"zip")
-    call = _call(transport)
-    body_text = call.body.decode("utf-8")
-    assert 'name="autorestart"' in body_text
-    assert "\r\n\r\ntrue\r\n" in body_text
