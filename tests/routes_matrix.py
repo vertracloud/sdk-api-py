@@ -116,7 +116,6 @@ FORBIDDEN_PATHS: list[str] = [
     "/internal",
     "/v1/apps/scan",
     "/v1/users/me/downgrade",
-    "/transfer-ownership",
     "/approve",
     "/reject",
     "/v1/activities",
