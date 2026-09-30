@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.2](https://github.com/vertracloud/sdk-api-py/compare/v0.1.1...v0.1.2) (2026-09-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove autorestart/auto_restart field from the application contract
+
+* release 0.1.2 ([8e9ff23](https://github.com/vertracloud/sdk-api-py/commit/8e9ff23fe22ea9fe6416d2f4259751ed8cf2584f))
+
+
+### Features
+
+* remove autorestart/auto_restart field from the application contract ([07ec328](https://github.com/vertracloud/sdk-api-py/commit/07ec32865b341e7fafd02926fb7192b91a858dd4))
+
 ## [0.1.1](https://github.com/vertracloud/sdk-api-py/compare/v0.1.0...v0.1.1) (2026-09-23)
 
 
