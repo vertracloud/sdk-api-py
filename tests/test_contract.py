@@ -299,5 +299,3 @@ def test_apps_envs_set_accepts_list() -> None:
     client.apps.envs.set(ID, body)
     call = _call(transport)
     assert _body(call) == body
-
-
