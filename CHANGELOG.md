@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.3](https://github.com/vertracloud/sdk-api-py/compare/v0.1.2...v0.1.3) (2026-10-05)
+
+
+* release 0.1.3 ([65123be](https://github.com/vertracloud/sdk-api-py/commit/65123bec19e4cf26303e71706bfbc6bc678669ce))
+
+
+### Features
+
+* **billing:** billing details, card provider and new order fields ([f3191a5](https://github.com/vertracloud/sdk-api-py/commit/f3191a5b6666a007f92b0b42b55e13926a502ab7))
+
 ## [0.1.2](https://github.com/vertracloud/sdk-api-py/compare/v0.1.1...v0.1.2) (2026-09-30)
 
 
