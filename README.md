@@ -143,9 +143,9 @@ client = VertraClient(api_key="test", transport=my_fake_transport)
 | Snapshots | `client.snapshots` | 5 |
 | Account | `client.account` (+ `.sessions`, `.folders`, `.favorites`) | 10 |
 | Workspaces | `client.workspaces` (+ `.members`, `.roles`, `.invites`, `.action_requests`, `.apps`, `.databases`, `.folders`, `.favorites`) | 30 |
-| Billing | `client.billing` (+ `.orders`) | 5 |
+| Billing | `client.billing` (+ `.orders`) | 7 |
 
-Dashboard-only features (activity log, notifications, API key management, the database **Data** tab, plan downgrade, creating workspace invites, transferring workspace ownership and approving action requests) are not part of the public API. See [what an API key cannot do](https://docs.vertracloud.app/sdks).
+Dashboard-only features (activity log, notifications, API key management, the database **Data** tab, plan downgrade, creating workspace invites, card payments, saved cards, automatic renewal, coupon preview, receipts and approving action requests) are not part of the public API. See [what an API key cannot do](https://docs.vertracloud.app/sdks).
 
 ## Versioning
 

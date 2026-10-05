@@ -128,6 +128,8 @@ def _drive_all_calls(client: VertraClient, transport: FakeTransport) -> None:
     billing.orders.status("order-1")
     billing.orders.create({"plan": "pro"})
     billing.orders.initiate_pix("order-1")
+    billing.details()
+    billing.update_details({"name": "x", "address": {"line1": "x", "city": "x", "country": "US"}})
     billing.redeem("CODE123")
 
 

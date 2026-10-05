@@ -187,6 +187,7 @@ class UpdateRoleBody(TypedDict, total=False):
 
 
 OrderType = Literal["purchase", "renew", "upgrade"]
+OrderProvider = Literal["pix", "card", "redeem_code"]
 
 
 class CreateOrderBody(TypedDict, total=False):
@@ -195,6 +196,33 @@ class CreateOrderBody(TypedDict, total=False):
     coupon: str
     type: OrderType
     source: str
+
+
+class APIBillingAddress(TypedDict):
+    line1: str
+    number: str | None
+    line2: str | None
+    district: str | None
+    city: str
+    city_code: str | None
+    state: str | None
+    postal_code: str | None
+    country: str
+
+
+class BillingTaxIdBody(TypedDict):
+    type: Literal["cpf", "cnpj"]
+    value: str
+
+
+class _PutBillingDetailsRequired(TypedDict):
+    name: str
+    address: APIBillingAddress
+
+
+class PutBillingDetailsBody(_PutBillingDetailsRequired, total=False):
+    phone: str | None  # E.164; None or omitted removes the saved phone
+    tax_id: BillingTaxIdBody | None  # None removes the saved document; omitted keeps it
 
 
 # -- responses -------------------------------------------------------------
@@ -674,6 +702,20 @@ class _APIOrderCreateResponseRequired(TypedDict):
     status: str
     price: float
     expires_at: str | None
+    allowed_payment_methods: list[OrderProvider]
+
+
+class APIBillingTaxId(TypedDict):
+    type: Literal["cpf", "cnpj"]
+    masked: str
+
+
+class APIBillingDetails(TypedDict):
+    name: str | None
+    address: APIBillingAddress | None
+    phone: str | None
+    tax_id: APIBillingTaxId | None
+    complete: bool
 
 
 class APIOrderCreateResponse(_APIOrderCreateResponseRequired, total=False):
@@ -705,6 +747,7 @@ class APIOrderStatus(TypedDict):
     status: str
     price: float
     related_to: APIOrderStatusRelatedTo
+    allowed_payment_methods: list[OrderProvider]
 
 
 class APIOrderListItem(TypedDict):
@@ -716,6 +759,7 @@ class APIOrderListItem(TypedDict):
     related_to: APIOrderListItemRelatedTo
     created_at: str
     paid_at: str | None
+    has_receipt: bool
 
 
 class APIPixQrCode(TypedDict):
