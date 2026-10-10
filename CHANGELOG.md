@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.4](https://github.com/vertracloud/sdk-api-py/compare/v0.1.3...v0.1.4) (2026-10-10)
+
+
+* release 0.1.4 ([b8a1182](https://github.com/vertracloud/sdk-api-py/commit/b8a1182904949ea6676b6dca7da4e25a5aaa4a35))
+
+
+### Features
+
+* **apps:** add destination path option to file upload ([e19372d](https://github.com/vertracloud/sdk-api-py/commit/e19372d3302481fa5e509d3e9f0f0c040c6731d3))
+
 ## [0.1.3](https://github.com/vertracloud/sdk-api-py/compare/v0.1.2...v0.1.3) (2026-10-05)
 
 
