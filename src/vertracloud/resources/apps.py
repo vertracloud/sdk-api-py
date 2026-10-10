@@ -260,18 +260,21 @@ class AppFilesResource:
         file: bytes,
         filename: str,
         restart: bool | None = None,
+        path: str | None = None,
         workspace_id: str | None = None,
         timeout: float | None = None,
     ) -> APIAppFileUploadResponse:
         """POST /v1/apps/:id/files/upload — scope `apps:files`. Multipart, field `file`;
         `restart` goes as the query string `"true"`/`"false"`, not a JSON bool.
+        `path` is the destination folder inside the app (omitted or empty means the root);
+        a ZIP is extracted into it, any other file is written to `path/<filename>`.
         Returns `app_id` and `updated_at`; ZIP uploads also include dependency metadata."""
         fields = [MultipartField("file", file, filename=filename)]
         return self._c.request_multipart(
             "POST",
             f"/v1/apps/{encode_path_param(app_id)}/files/upload",
             fields=fields,
-            query={"restart": restart, "workspace_id": workspace_id},
+            query={"restart": restart, "path": path, "workspace_id": workspace_id},
             timeout=timeout if timeout is not None else LARGE_PAYLOAD_TIMEOUT,
         )
 

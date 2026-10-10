@@ -192,6 +192,14 @@ def test_apps_files_upload_multipart_field_name_is_file() -> None:
     assert b'filename="a.py"' in call.body
 
 
+def test_apps_files_upload_path_goes_in_query() -> None:
+    client, transport = _client()
+    client.apps.files.upload(ID, file=b"conteudo", filename="a.py", path="src/lib")
+    call = _call(transport)
+    assert _query(call) == {"path": ["src/lib"]}
+    assert b'name="path"' not in call.body
+
+
 def test_apps_create_multipart_envs_serialized_as_json_string() -> None:
     client, transport = _client()
     client.apps.create({"name": "x", "envs": [{"key": "K", "value": "V"}]}, file=b"zip")
