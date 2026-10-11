@@ -1,4 +1,4 @@
-"""Local fixture with the 101 routes from the API key catalog, and the list of forbidden
+"""Local fixture with the 105 routes from the API key catalog, and the list of forbidden
 paths. `tests/test_routes_matrix.py` proves exact coverage and exclusion."""
 
 from __future__ import annotations
@@ -32,6 +32,9 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("GET", "/v1/apps/:id"),
     ("GET", "/v1/apps/:id/deploys"),
     ("GET", "/v1/apps/:id/deploys/webhook"),
+    ("GET", "/v1/apps/:id/releases"),
+    ("GET", "/v1/apps/:id/releases/:release_id/log"),
+    ("GET", "/v1/apps/:id/releases/:release_id/rollback"),
     ("GET", "/v1/apps/:id/download"),
     ("GET", "/v1/apps/:id/envs"),
     ("GET", "/v1/apps/:id/files"),
@@ -75,6 +78,7 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("POST", "/v1/apps/:id/network/custom"),
     ("POST", "/v1/apps/:id/network/publish"),
     ("POST", "/v1/apps/:id/network/purge-cache"),
+    ("POST", "/v1/apps/:id/releases/:release_id/rollback"),
     ("POST", "/v1/apps/:id/restart"),
     ("POST", "/v1/apps/:id/start"),
     ("POST", "/v1/apps/:id/stop"),
@@ -107,7 +111,7 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("PUT", "/v1/workspaces/:id/roles/:role_id"),
 ]
 
-assert len(FROZEN_ROUTES) == 101, f"expected 101 frozen routes, found {len(FROZEN_ROUTES)}"
+assert len(FROZEN_ROUTES) == 105, f"expected 105 frozen routes, found {len(FROZEN_ROUTES)}"
 
 # Forbidden paths: none of these may appear, in any form, in `src/vertracloud/**`.
 FORBIDDEN_PATHS: list[str] = [

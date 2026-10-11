@@ -66,7 +66,7 @@ app = client.apps.get(app_id, workspace_id=workspace_id)
 zip_bytes = client.apps.download(app_id, timeout=300)
 ```
 
-Nested resources are attributes: `client.apps.deploys`, `client.apps.envs`, `client.workspaces.members`, `client.billing.orders`, …
+Nested resources are attributes: `client.apps.deploys`, `client.apps.releases`, `client.apps.envs`, `client.workspaces.members`, `client.billing.orders`, …
 
 ### Apps
 
@@ -79,6 +79,35 @@ client.apps.restart(app_id, {"reinstall_dependencies": True})
 metrics = client.apps.metrics(app_id, range="24h")
 logs = client.apps.logs(app_id)
 ```
+
+### Releases and rollback
+
+```python
+page = client.apps.releases.list(app_id, limit=20)  # newest first, max 50 per page
+release_id = page["data"][1]["id"]
+
+log = client.apps.releases.log(app_id, release_id)  # log["content"] is None when absent or expired
+
+# Preview what restoring the saved environment variables would change.
+# The preview returns variable names only, never values.
+preview = client.apps.releases.preview_rollback(app_id, release_id)
+for change in preview["environment_changes"]:
+    print(change["key"], change["change"])  # added | modified | removed
+
+# Restores the release's code and restarts the app. Variables are kept unless you ask for them.
+new_release = client.apps.releases.rollback(app_id, release_id, {"restore_environment": True})
+```
+
+`rollback` needs `apps:write`; with `restore_environment` the key also needs `apps:envs`, as does the preview. Deploy behavior is set through `update_config`:
+
+```python
+client.apps.update_config(
+    app_id, {"deploy": {"zero_downtime": "auto", "auto_rollback": True, "health_check_path": "/health"}}
+)
+client.apps.update_config(app_id, {"deploy": {"health_check_path": None}})  # clears the path
+```
+
+`client.apps.files.upload(..., message="...")` sets the message shown in the release history.
 
 ### Uploading and downloading
 
@@ -138,7 +167,7 @@ client = VertraClient(api_key="test", transport=my_fake_transport)
 
 | Domain | Resource | Routes |
 |---|---|---|
-| Apps | `client.apps` (+ `.deploys`, `.network`, `.envs`, `.files`) | 36 |
+| Apps | `client.apps` (+ `.deploys`, `.releases`, `.network`, `.envs`, `.files`) | 40 |
 | Databases | `client.databases` (+ `.credentials`) | 13 |
 | Snapshots | `client.snapshots` | 5 |
 | Account | `client.account` (+ `.sessions`, `.folders`, `.favorites`) | 10 |

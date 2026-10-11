@@ -51,6 +51,18 @@ class CreateAppBody(TypedDict, total=False):
     envs: list[EnvEntry]
 
 
+ApplicationZeroDowntime = Literal["auto", "on", "off"]
+
+
+class UpdateAppDeployBody(TypedDict, total=False):
+    """`deploy` in `PATCH /v1/apps/:id/config`. Omit a key to leave it unchanged;
+    `health_check_path: None` is sent as JSON `null` and clears the path (back to `/`)."""
+
+    zero_downtime: ApplicationZeroDowntime
+    auto_rollback: bool
+    health_check_path: str | None
+
+
 class UpdateAppConfigBody(TypedDict, total=False):
     name: str
     description: str | None
@@ -60,6 +72,13 @@ class UpdateAppConfigBody(TypedDict, total=False):
     build_command: str | None
     ram: int
     language: str
+    deploy: UpdateAppDeployBody
+
+
+class RollbackAppBody(TypedDict, total=False):
+    """Body of `POST /v1/apps/:id/releases/:release_id/rollback`."""
+
+    restore_environment: bool
 
 
 class RestartAppBody(TypedDict, total=False):
@@ -249,6 +268,13 @@ class APIApplicationGithub(TypedDict):
     repo_name: str
 
 
+class APIApplicationDeploySettings(TypedDict):
+    zero_downtime: ApplicationZeroDowntime
+    zero_downtime_active: bool
+    auto_rollback: bool
+    health_check_path: str | None
+
+
 class _APIApplicationRequired(TypedDict):
     id: str
     cluster: int
@@ -271,6 +297,7 @@ class _APIApplicationRequired(TypedDict):
     build_command: str | None
     offline_since: str | None
     shield_cooldown: APIApplicationShieldCooldown | None
+    deploy: APIApplicationDeploySettings
 
 
 class APIApplication(_APIApplicationRequired, total=False):
@@ -354,6 +381,55 @@ class APIApplicationDeployment(TypedDict):
     pusher: str
     branch: str
     created_at: str
+
+
+ApplicationReleaseSource = Literal["github", "cli", "upload", "editor", "rollback", "env_change"]
+ApplicationReleaseStatus = Literal["deploying", "active", "superseded", "failed", "rolled_back", "expired"]
+ApplicationEnvironmentChange = Literal["added", "modified", "removed"]
+
+
+# Functional syntax: the JSON key `from` is a Python keyword.
+APIApplicationReleaseRollback = TypedDict(
+    "APIApplicationReleaseRollback", {"available": bool, "expires_at": str | None, "from": str | None}
+)
+
+
+class APIApplicationRelease(TypedDict):
+    id: str
+    app_id: str
+    source: ApplicationReleaseSource
+    status: ApplicationReleaseStatus
+    message: str | None
+    author: str
+    github: APIApplicationDeployment | None
+    files_changed: int
+    rollback: APIApplicationReleaseRollback
+    has_log: bool
+    build_duration_ms: int | None
+    created_at: str
+
+
+class APIApplicationReleasePage(TypedDict):
+    data: list[APIApplicationRelease]
+    total_count: int
+    page: int
+    limit: int
+    total_pages: int
+    has_next_page: bool
+    has_previous_page: bool
+
+
+class APIApplicationReleaseLog(TypedDict):
+    content: str | None
+
+
+class APIApplicationEnvironmentChange(TypedDict):
+    key: str
+    change: ApplicationEnvironmentChange
+
+
+class APIApplicationRollbackPreview(TypedDict):
+    environment_changes: list[APIApplicationEnvironmentChange]
 
 
 class APIDnsRecord(TypedDict):

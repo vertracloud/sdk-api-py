@@ -307,3 +307,49 @@ def test_apps_envs_set_accepts_list() -> None:
     client.apps.envs.set(ID, body)
     call = _call(transport)
     assert _body(call) == body
+
+
+# -- releases, rollback and deploy settings --------------------------------------------
+
+
+def test_releases_list_method_path_and_query() -> None:
+    client, transport = _client()
+    client.apps.releases.list(ID, page=2, limit=50, workspace_id="w1")
+    call = _call(transport)
+    assert (call.method, call.path) == ("GET", f"/v1/apps/{ID}/releases")
+    assert _query(call) == {"page": ["2"], "limit": ["50"], "workspace_id": ["w1"]}
+    client.apps.releases.list(ID)
+    assert _query(_call(transport, 1)) == {}
+
+
+def test_release_log_and_rollback_preview_paths() -> None:
+    client, transport = _client()
+    client.apps.releases.log(ID, ID2, workspace_id="w1")
+    client.apps.releases.preview_rollback(ID, ID2)
+    log, preview = _call(transport, 0), _call(transport, 1)
+    assert (log.method, log.path) == ("GET", f"/v1/apps/{ID}/releases/{ID2}/log")
+    assert _query(log) == {"workspace_id": ["w1"]}
+    assert (preview.method, preview.path) == ("GET", f"/v1/apps/{ID}/releases/{ID2}/rollback")
+    assert preview.body is None
+
+
+def test_rollback_body_with_and_without_restore_environment() -> None:
+    client, transport = _client()
+    client.apps.releases.rollback(ID, ID2)
+    client.apps.releases.rollback(ID, ID2, {"restore_environment": True}, workspace_id="w1")
+    first, second = _call(transport, 0), _call(transport, 1)
+    assert (first.method, first.path) == ("POST", f"/v1/apps/{ID}/releases/{ID2}/rollback")
+    assert _body(first) == {}
+    assert _body(second) == {"restore_environment": True}
+    assert _query(second) == {"workspace_id": ["w1"]}
+
+
+def test_update_config_deploy_absent_vs_none() -> None:
+    client, transport = _client()
+    client.apps.update_config(ID, {"deploy": {"zero_downtime": "off", "auto_rollback": True}})
+    client.apps.update_config(ID, {"deploy": {"health_check_path": None}})
+    client.apps.update_config(ID, {"name": "x"})
+    assert _body(_call(transport, 0)) == {"deploy": {"zero_downtime": "off", "auto_rollback": True}}
+    assert _body(_call(transport, 1)) == {"deploy": {"health_check_path": None}}
+    assert "deploy" not in _body(_call(transport, 2))
+    assert b'"health_check_path": null' in (_call(transport, 1).body or b"")

@@ -63,6 +63,17 @@ def test_upload_file_multipart_field_name_is_file() -> None:
     }
 
 
+def test_upload_file_message_is_a_text_part_and_optional() -> None:
+    transport = FakeTransport()
+    client = VertraClient(api_key="k", transport=transport)
+    client.apps.files.upload("app-1", file=b"x", filename="a.py", message="fix login")
+    client.apps.files.upload("app-1", file=b"x", filename="a.py")
+    with_msg = transport.calls[0].body or b""
+    without = transport.calls[1].body or b""
+    assert b'name="message"\r\n\r\nfix login' in with_msg
+    assert b'name="message"' not in without
+
+
 def test_download_returns_raw_bytes_not_json() -> None:
     transport = FakeTransport()
     transport.queue_binary(b"\x50\x4b\x03\x04fake-zip")

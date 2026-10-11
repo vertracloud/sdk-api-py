@@ -1,4 +1,4 @@
-"""`apps` domain — 36 routes (scopes `apps:read/write/delete/envs/files`).
+"""`apps` domain — 40 routes (scopes `apps:read/write/delete/envs/files`).
 
 `workspace_id` is accepted as an optional query parameter on almost every method.
 """
@@ -17,6 +17,10 @@ from ..types import (
     APIApplicationFileContent,
     APIApplicationFileTree,
     APIApplicationOperationResponse,
+    APIApplicationRelease,
+    APIApplicationReleaseLog,
+    APIApplicationReleasePage,
+    APIApplicationRollbackPreview,
     APIApplicationStatus,
     APIApplicationStatusShort,
     APIApplicationWebPublish,
@@ -34,6 +38,7 @@ from ..types import (
     PublishAppBody,
     PurgeCacheBody,
     RestartAppBody,
+    RollbackAppBody,
     SetSubdomainBody,
     UpdateAppConfigBody,
 )
@@ -85,6 +90,78 @@ class AppDeploysResource:
         """
         return self._c.request_json(
             "GET", f"/v1/apps/{encode_path_param(app_id)}/deploys", query={"workspace_id": workspace_id}
+        )
+
+
+class AppReleasesResource:
+    def __init__(self, client: VertraClient) -> None:
+        self._c = client
+
+    def list(
+        self,
+        app_id: str,
+        *,
+        page: int | None = None,
+        limit: int | None = None,
+        workspace_id: str | None = None,
+    ) -> APIApplicationReleasePage:
+        """GET /v1/apps/:id/releases — scope `apps:read`. Newest first, paginated; `limit`
+        defaults to 20 and the maximum is 50 (larger values fail with `VALIDATION_ERROR`).
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/releases/list
+        """
+        return self._c.request_json(
+            "GET",
+            f"/v1/apps/{encode_path_param(app_id)}/releases",
+            query={"page": page, "limit": limit, "workspace_id": workspace_id},
+        )
+
+    def log(self, app_id: str, release_id: str, *, workspace_id: str | None = None) -> APIApplicationReleaseLog:
+        """GET /v1/apps/:id/releases/:release_id/log — scope `apps:read`. The crash log of the
+        release; `content` is `None` when there is no log or it has expired.
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/releases/log
+        """
+        return self._c.request_json(
+            "GET",
+            f"/v1/apps/{encode_path_param(app_id)}/releases/{encode_path_param(release_id)}/log",
+            query={"workspace_id": workspace_id},
+        )
+
+    def preview_rollback(
+        self, app_id: str, release_id: str, *, workspace_id: str | None = None
+    ) -> APIApplicationRollbackPreview:
+        """GET /v1/apps/:id/releases/:release_id/rollback — scope `apps:envs`. Changes nothing.
+        Returns `environment_changes`, a list of `{key, change}` (`added`, `modified` or
+        `removed`) for what `restore_environment=True` would do. Only variable names are
+        returned, never values. Raises a 403 `PLAN_DOES_NOT_SUPPORT_ROLLBACK` when the plan has no rollback.
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/releases/rollback-preview
+        """
+        return self._c.request_json(
+            "GET",
+            f"/v1/apps/{encode_path_param(app_id)}/releases/{encode_path_param(release_id)}/rollback",
+            query={"workspace_id": workspace_id},
+        )
+
+    def rollback(
+        self,
+        app_id: str,
+        release_id: str,
+        body: RollbackAppBody | None = None,
+        *,
+        workspace_id: str | None = None,
+    ) -> APIApplicationRelease:
+        """POST /v1/apps/:id/releases/:release_id/rollback — scope `apps:write`; with
+        `restore_environment=True` the key also needs `apps:envs`. Restores the release's code,
+        restarts the app and returns the new release (`source == "rollback"`). The current
+        environment variables are kept unless `restore_environment` is `True`.
+        Errors: `PLAN_DOES_NOT_SUPPORT_ROLLBACK`, `RELEASE_NOT_FOUND`, `RELEASE_ALREADY_ACTIVE`,
+        `RELEASE_EXPIRED`, `OPERATION_IN_PROGRESS`, `RESTORE_COOLDOWN`, `DEPLOY_RATE_LIMITED`.
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/releases/rollback
+        """
+        return self._c.request_json(
+            "POST",
+            f"/v1/apps/{encode_path_param(app_id)}/releases/{encode_path_param(release_id)}/rollback",
+            json_body=body or {},
+            query={"workspace_id": workspace_id},
         )
 
 
@@ -261,6 +338,7 @@ class AppFilesResource:
         filename: str,
         restart: bool | None = None,
         path: str | None = None,
+        message: str | None = None,
         workspace_id: str | None = None,
         timeout: float | None = None,
     ) -> APIAppFileUploadResponse:
@@ -268,8 +346,11 @@ class AppFilesResource:
         `restart` goes as the query string `"true"`/`"false"`, not a JSON bool.
         `path` is the destination folder inside the app (omitted or empty means the root);
         a ZIP is extracted into it, any other file is written to `path/<filename>`.
+        `message` (up to 500 characters) is the commit message shown in the release history.
         Returns `app_id` and `updated_at`; ZIP uploads also include dependency metadata."""
         fields = [MultipartField("file", file, filename=filename)]
+        if message is not None:
+            fields.append(MultipartField("message", message))
         return self._c.request_multipart(
             "POST",
             f"/v1/apps/{encode_path_param(app_id)}/files/upload",
@@ -281,11 +362,12 @@ class AppFilesResource:
 
 class AppsResource:
     """`apps.*` — get/status/statusAll/runtimes/realtime/metrics/logs/download/create/start/
-    stop/restart/updateConfig/delete + `deploys`, `network`, `envs`, `files`."""
+    stop/restart/updateConfig/delete + `deploys`, `releases`, `network`, `envs`, `files`."""
 
     def __init__(self, client: VertraClient) -> None:
         self._c = client
         self.deploys = AppDeploysResource(client)
+        self.releases = AppReleasesResource(client)
         self.network = AppNetworkResource(client)
         self.envs = AppEnvsResource(client)
         self.files = AppFilesResource(client)
@@ -406,7 +488,11 @@ class AppsResource:
         )
 
     def update_config(self, app_id: str, body: UpdateAppConfigBody, *, workspace_id: str | None = None) -> str:
-        """PATCH /v1/apps/:id/config — scope `apps:write`. Returns `"success"`, not the app."""
+        """PATCH /v1/apps/:id/config — scope `apps:write`. Returns `"success"`, not the app.
+        `deploy` sets `zero_downtime` (`"auto"`, `"on"`, `"off"`), `auto_rollback` and
+        `health_check_path`; omit a key to leave it unchanged, pass `None` as the path to clear it.
+        `zero_downtime="on"` and `auto_rollback=True` need a higher plan and fail with
+        `PLAN_DOES_NOT_SUPPORT_ZERO_DOWNTIME` / `PLAN_DOES_NOT_SUPPORT_AUTO_ROLLBACK`."""
         return self._c.request_json(
             "PATCH",
             f"/v1/apps/{encode_path_param(app_id)}/config",
