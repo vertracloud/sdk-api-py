@@ -406,6 +406,7 @@ class APIApplicationRelease(TypedDict):
     rollback: APIApplicationReleaseRollback
     has_log: bool
     build_duration_ms: int | None
+    first_started_at: str | None
     created_at: str
 
 
