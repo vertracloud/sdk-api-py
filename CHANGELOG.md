@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.5](https://github.com/vertracloud/sdk-api-py/compare/v0.1.4...v0.1.5) (2026-10-12)
+
+
+### Features
+
+* **apps:** releases, rollback, deploy settings and upload message ([496c984](https://github.com/vertracloud/sdk-api-py/commit/496c984fa45352c58bd6dbff52a41cbd87a334b4))
+* **types:** add first_started_at to APIApplicationRelease ([71fbdb9](https://github.com/vertracloud/sdk-api-py/commit/71fbdb9a5d90bfc31a86239419013b9301f819a5))
+
 ## [0.1.4](https://github.com/vertracloud/sdk-api-py/compare/v0.1.3...v0.1.4) (2026-10-10)
 
 
