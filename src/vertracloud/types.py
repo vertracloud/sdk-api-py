@@ -825,6 +825,7 @@ class APIOrderStatus(TypedDict):
     price: float
     related_to: APIOrderStatusRelatedTo
     allowed_payment_methods: list[OrderProvider]
+    expires_at: str | None
 
 
 class APIOrderListItem(TypedDict):
@@ -849,6 +850,7 @@ class APIPixPaymentResponse(TypedDict):
     external_reference: str | None
     txid: str
     qrcode: APIPixQrCode
+    expires_at: str | None
 
 
 class APIRedeemPlan(TypedDict):
