@@ -50,7 +50,7 @@ Every method has a docstring with its HTTP route and the API key scope it needs.
 client = VertraClient(
     api_key=os.environ["VERTRA_API_KEY"],
     timeout=10,  # seconds, default 30 per call
-    # base_url, user_agent and a custom transport are also accepted
+    # base_url, blob_base_url, user_agent and a custom transport are also accepted
 )
 ```
 
@@ -136,6 +136,28 @@ finally:
 
 Stop the stream with `break` or `stream.close()`. Pass `since=` to resume. There is no automatic reconnection.
 
+### Blob Storage
+
+`client.blob` talks to the Blob Storage API (`blob_base_url`, default `https://blob.vertracloud.app/v1`) with the same API key (`blob:read` / `blob:write`). Every method accepts `workspace_id`.
+
+```python
+obj = client.blob.put(
+    "images/logo.png",
+    "./logo.png",
+    visibility="public",
+    on_progress=lambda loaded, total: print(loaded, total),
+)
+print(obj["url"])
+
+for o in client.blob.list(prefix="images/"):  # follows the cursor for you
+    print(o["path"], o["size"])
+
+link = client.blob.download_url(obj["id"], expires_in=600)  # {"url", "expires_at"}
+client.blob.delete_many(prefix="tmp/")
+```
+
+`data` can be `bytes`, a file path, or a seekable binary file. Up to 5 MB it is one request; larger files go straight to storage in parts, with a retry per part. If the process dies halfway, `client.blob.resume(upload_id, data)` sends only the missing parts.
+
 ### Errors
 
 Every non-2xx response raises a `VertraAPIError` carrying the HTTP `status`, the API `code` (e.g. `APP_NOT_FOUND`) and `details`; `str(err)` includes the message. The API key is never part of the error, even when it is printed:
@@ -173,6 +195,7 @@ client = VertraClient(api_key="test", transport=my_fake_transport)
 | Account | `client.account` (+ `.sessions`, `.folders`, `.favorites`) | 10 |
 | Workspaces | `client.workspaces` (+ `.members`, `.roles`, `.invites`, `.action_requests`, `.apps`, `.databases`, `.folders`, `.favorites`) | 30 |
 | Billing | `client.billing` (+ `.orders`) | 7 |
+| Blob Storage | `client.blob` (+ `.shares`, `.rules`, `.domains`) | own host |
 
 Dashboard-only features (activity log, notifications, API key management, the database **Data** tab, plan downgrade, creating workspace invites, card payments, saved cards, automatic renewal, coupon preview, receipts and approving action requests) are not part of the public API. See [what an API key cannot do](https://docs.vertracloud.app/sdks).
 

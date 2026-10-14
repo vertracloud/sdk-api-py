@@ -178,4 +178,6 @@ def test_fixture_matches_api_key_catalog() -> None:
     if not catalog.exists():
         pytest.skip("api-types is not next to this repo")
     routes = set(re.findall(r'\{ method: "([A-Z]+)", path: "([^"]+)" \}', catalog.read_text(encoding="utf-8")))
+    # Blob Storage lives on its own host (`client.blob`), covered by `test_blob.py`.
+    routes = {r for r in routes if not r[1].startswith("/v1/blob/")}
     assert routes == set(FROZEN_ROUTES)

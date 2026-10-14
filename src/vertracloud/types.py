@@ -860,3 +860,187 @@ class APIRedeemPlan(TypedDict):
 
 class APIRedeemResponse(TypedDict):
     plan: APIRedeemPlan
+
+
+# -- Blob Storage ----------------------------------------------------------------------
+
+BlobVisibility = Literal["public", "private"]
+BlobContentDisposition = Literal["inline", "attachment"]
+BlobUploadMode = Literal["single", "multipart"]
+BlobUploadStatus = Literal["pending", "completed", "aborted", "expired"]
+BlobCustomDomainStatus = Literal["pending", "active", "failed", "suspended"]
+
+
+class APIBlobObject(TypedDict):
+    id: str
+    path: str
+    size: int
+    content_type: str
+    etag: str
+    sha256: str | None
+    visibility: BlobVisibility
+    url: str | None
+    cache_control: str | None
+    content_disposition: BlobContentDisposition
+    filename: str | None
+    metadata: dict[str, str]
+    expires_at: str | None
+    created_at: str
+    updated_at: str
+
+
+class APIBlobObjectList(TypedDict):
+    objects: list[APIBlobObject]
+    folders: list[str]
+    cursor: str | None
+
+
+class _APIBlobUploadOptional(TypedDict, total=False):
+    url: str
+    part_size: int
+    part_count: int
+    uploaded_parts: list[int]
+
+
+class APIBlobUpload(_APIBlobUploadOptional):
+    id: str
+    path: str
+    mode: BlobUploadMode
+    status: BlobUploadStatus
+    size: int
+    expires_at: str
+    headers: dict[str, str]
+    created_at: str
+
+
+class APIBlobUploadPart(TypedDict):
+    part_number: int
+    url: str
+    size: int
+    headers: dict[str, str]
+
+
+class APIBlobLimits(TypedDict):
+    max_simple_upload_bytes: int
+    max_single_put_bytes: int
+    max_object_bytes: int
+    min_part_bytes: int
+    max_part_bytes: int
+    max_parts: int
+    max_open_uploads: int
+    uploads_per_second: int | None
+    max_rules: int
+    max_custom_domains: int
+    metadata_enabled: bool
+    share_password_enabled: bool
+    no_cache_enabled: bool
+    min_expiration_seconds: int
+    image_transformations_per_month: int
+
+
+class APIBlobStats(TypedDict):
+    objects: int
+    used_bytes: int
+    quota_bytes: int
+    over_quota_bytes: int
+    estimated_overage_cents: int
+    month_average_bytes: int
+    image_transformations_used: int
+    public_base_url: str
+    limits: APIBlobLimits
+
+
+class _APIBlobBatchResultOptional(TypedDict, total=False):
+    code: str
+    object: APIBlobObject
+
+
+class APIBlobBatchResult(_APIBlobBatchResultOptional):
+    id: str
+    ok: bool
+
+
+class APIBlobDeleteResult(TypedDict):
+    deleted: list[str]
+    not_found: list[str]
+    remaining: bool
+
+
+class APIBlobDownload(TypedDict):
+    url: str
+    expires_at: str
+
+
+class APIBlobUploadToken(TypedDict):
+    token: str
+    expires_at: str
+    max_uses: int
+
+
+class APIBlobShare(TypedDict):
+    id: str
+    object_id: str
+    url: str
+    expires_at: str
+    max_downloads: int | None
+    remaining_downloads: int | None
+    has_password: bool
+    object_is_public: bool
+    created_at: str
+
+
+class BlobRuleInput(TypedDict, total=False):
+    """Fields of a folder rule (`rules.put`); `rules.set` also needs `prefix` on each item."""
+
+    prefix: str
+    visibility: BlobVisibility
+    expire_seconds: int
+    max_size: int
+    extensions: list[str]
+    cache_control: str
+    delete_after_days: int
+
+
+class APIBlobRule(BlobRuleInput):
+    active_from: str
+    created_at: str
+
+
+class APIBlobRules(TypedDict):
+    rules: list[APIBlobRule]
+    etag: str
+
+
+class _APIBlobS3Access(TypedDict):
+    read: bool
+    write: bool
+
+
+class APIBlobS3Credentials(TypedDict):
+    access_key_id: str
+    secret_access_key: str
+    endpoint: str
+    region: Literal["auto"]
+    buckets: list[str]
+    access: _APIBlobS3Access
+
+
+class APIBlobCustomDomainVerification(TypedDict):
+    type: Literal["txt"]
+    name: str
+    value: str
+
+
+class _APIBlobCustomDomainRequired(TypedDict):
+    id: str
+    hostname: str
+    status: BlobCustomDomainStatus
+    ssl_status: str
+    cname_target: str
+    prefix: str | None
+    created_at: str
+
+
+class APIBlobCustomDomain(_APIBlobCustomDomainRequired, total=False):
+    # Only while the domain is not active: the TXT record that proves ownership.
+    verification: APIBlobCustomDomainVerification | None

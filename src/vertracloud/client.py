@@ -19,6 +19,7 @@ from .types import JsonValue
 __version__ = "0.1.5"  # x-release-please-version
 
 DEFAULT_BASE_URL = "https://api.vertracloud.app"
+DEFAULT_BLOB_BASE_URL = "https://blob.vertracloud.app/v1"
 DEFAULT_TIMEOUT = 30.0
 # Download/upload/create for an app may involve a large zip file, so the timeout is longer.
 LARGE_PAYLOAD_TIMEOUT = 120.0
@@ -74,6 +75,7 @@ class VertraClient:
     Args:
         api_key: the user's API key (`Authorization: Bearer <key>`).
         base_url: defaults to `https://api.vertracloud.app`.
+        blob_base_url: Blob Storage API, defaults to `https://blob.vertracloud.app/v1`.
         timeout: seconds, defaults to 30. Can be overridden per call (download/upload/create).
         user_agent: defaults to `vertracloud-sdk-py/<version>`.
         transport: injectable `Transport` implementation (tests use a fake one).
@@ -84,6 +86,7 @@ class VertraClient:
         *,
         api_key: str,
         base_url: str = DEFAULT_BASE_URL,
+        blob_base_url: str = DEFAULT_BLOB_BASE_URL,
         timeout: float = DEFAULT_TIMEOUT,
         user_agent: str | None = None,
         transport: Transport | None = None,
@@ -92,6 +95,7 @@ class VertraClient:
             raise ValueError("api_key is required")
         self._api_key = api_key
         self.base_url = base_url.rstrip("/")
+        self.blob_base_url = blob_base_url.rstrip("/")
         self.timeout = timeout
         self.user_agent = user_agent or f"vertracloud-sdk-py/{__version__}"
         self.transport: Transport = transport or UrllibTransport()
@@ -100,6 +104,7 @@ class VertraClient:
         from .resources.account import AccountResource
         from .resources.apps import AppsResource
         from .resources.billing import BillingResource
+        from .resources.blob import BlobResource
         from .resources.databases import DatabasesResource
         from .resources.snapshots import SnapshotsResource
         from .resources.workspaces import WorkspacesResource
@@ -110,6 +115,7 @@ class VertraClient:
         self.account = AccountResource(self)
         self.workspaces = WorkspacesResource(self)
         self.billing = BillingResource(self)
+        self.blob = BlobResource(self)
 
     def __repr__(self) -> str:
         return f"VertraClient(base_url={self.base_url!r})"
@@ -126,8 +132,8 @@ class VertraClient:
             headers.update(extra)
         return headers
 
-    def _url(self, path: str, query: dict[str, Any] | None = None) -> str:
-        url = f"{self.base_url}{path}"
+    def _url(self, path: str, query: dict[str, Any] | None = None, base_url: str | None = None) -> str:
+        url = f"{base_url or self.base_url}{path}"
         if query:
             clean = {
                 k: ("true" if v is True else "false" if v is False else v) for k, v in query.items() if v is not None
@@ -144,11 +150,16 @@ class VertraClient:
         query: dict[str, Any] | None = None,
         json_body: Any = None,
         timeout: float | None = None,
+        base_url: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> JsonValue:
         """Standard JSON call: sends `json_body` (if given), unwraps `{response}`."""
-        headers = self._headers({"Content-Type": "application/json"} if json_body is not None else None)
+        extra = dict(extra_headers or {})
+        if json_body is not None:
+            extra["Content-Type"] = "application/json"
+        headers = self._headers(extra)
         body = json.dumps(json_body).encode("utf-8") if json_body is not None else None
-        resp = self.transport.request(method, self._url(path, query), headers, body, timeout or self.timeout)
+        resp = self.transport.request(method, self._url(path, query, base_url), headers, body, timeout or self.timeout)
         return self._unwrap(resp)
 
     def request_multipart(
@@ -159,11 +170,21 @@ class VertraClient:
         fields: list[MultipartField],
         query: dict[str, Any] | None = None,
         timeout: float | None = None,
+        base_url: str | None = None,
     ) -> JsonValue:
         body, boundary = _build_multipart(fields)
         headers = self._headers({"Content-Type": f"multipart/form-data; boundary={boundary}"})
-        resp = self.transport.request(method, self._url(path, query), headers, body, timeout or self.timeout)
+        resp = self.transport.request(method, self._url(path, query, base_url), headers, body, timeout or self.timeout)
         return self._unwrap(resp)
+
+    def request_presigned(
+        self, method: str, url: str, headers: dict[str, str], body: bytes, timeout: float | None = None
+    ) -> Response:
+        """Direct storage call to a presigned URL: no API key, only the signed `headers`. Raises on >= 400."""
+        resp = self.transport.request(method, url, dict(headers), body, timeout or LARGE_PAYLOAD_TIMEOUT)
+        if resp.status >= 400:
+            self._raise_for_error(resp)
+        return resp
 
     def request_binary(
         self,
