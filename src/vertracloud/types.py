@@ -1038,6 +1038,8 @@ class _APIBlobCustomDomainRequired(TypedDict):
     ssl_status: str
     cname_target: str
     prefix: str | None
+    # true: the domain serves .html/.htm/.xhtml/.svg/.xml in the browser (sandboxed); false: always downloads.
+    web_content: bool
     created_at: str
 
 

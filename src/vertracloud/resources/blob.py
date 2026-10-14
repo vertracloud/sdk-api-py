@@ -170,11 +170,32 @@ class BlobDomainsResource:
         """GET /domains — scope `blob:read`."""
         return self._c.request_json("GET", "/domains", query=_ws(workspace_id), base_url=self._c.blob_base_url)
 
-    def add(self, hostname: str, prefix: str | None = None, *, workspace_id: str | None = None) -> APIBlobCustomDomain:
-        """POST /domains — scope `blob:write`."""
-        body = {"hostname": hostname, **({"prefix": prefix} if prefix is not None else {})}
+    def add(
+        self,
+        hostname: str,
+        prefix: str | None = None,
+        *,
+        web_content: bool | None = None,
+        workspace_id: str | None = None,
+    ) -> APIBlobCustomDomain:
+        """POST /domains — scope `blob:write`. `web_content=True` serves HTML/SVG/XML in the browser (sandboxed)."""
+        body = {
+            "hostname": hostname,
+            **({"prefix": prefix} if prefix is not None else {}),
+            **({"web_content": web_content} if web_content is not None else {}),
+        }
         return self._c.request_json(
             "POST", "/domains", json_body=body, query=_ws(workspace_id), base_url=self._c.blob_base_url
+        )
+
+    def update(self, domain_id: str, *, web_content: bool, workspace_id: str | None = None) -> APIBlobCustomDomain:
+        """PATCH /domains/:id — scope `blob:write`."""
+        return self._c.request_json(
+            "PATCH",
+            f"/domains/{encode_path_param(domain_id)}",
+            json_body={"web_content": web_content},
+            query=_ws(workspace_id),
+            base_url=self._c.blob_base_url,
         )
 
     def verify(self, domain_id: str, *, workspace_id: str | None = None) -> APIBlobCustomDomain:

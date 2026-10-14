@@ -297,22 +297,25 @@ def test_shares_domains_account() -> None:
     client.blob.shares.revoke("s1")
     assert (t.calls[2].method, t.calls[2].path) == ("DELETE", "/v1/shares/s1")
     client.blob.domains.list()
-    client.blob.domains.add("cdn.x.com", "img/")
-    assert _body(t.calls[4]) == {"hostname": "cdn.x.com", "prefix": "img/"}
+    client.blob.domains.add("cdn.x.com", "img/", web_content=True)
+    assert _body(t.calls[4]) == {"hostname": "cdn.x.com", "prefix": "img/", "web_content": True}
+    client.blob.domains.update("d1", web_content=False)
+    assert (t.calls[5].method, t.calls[5].path) == ("PATCH", "/v1/domains/d1")
+    assert _body(t.calls[5]) == {"web_content": False}
     client.blob.domains.verify("d1")
-    assert (t.calls[5].method, t.calls[5].path) == ("POST", "/v1/domains/d1/verify")
+    assert (t.calls[6].method, t.calls[6].path) == ("POST", "/v1/domains/d1/verify")
     client.blob.domains.delete("d1")
-    assert (t.calls[6].method, t.calls[6].path) == ("DELETE", "/v1/domains/d1")
+    assert (t.calls[7].method, t.calls[7].path) == ("DELETE", "/v1/domains/d1")
     client.blob.stats()
-    assert t.calls[7].path == "/v1/stats"
+    assert t.calls[8].path == "/v1/stats"
     client.blob.create_upload_token(prefix="avatars/", max_size=100)
-    assert (t.calls[8].method, t.calls[8].path) == ("POST", "/v1/upload-tokens")
-    assert _body(t.calls[8]) == {"prefix": "avatars/", "max_size": 100}
+    assert (t.calls[9].method, t.calls[9].path) == ("POST", "/v1/upload-tokens")
+    assert _body(t.calls[9]) == {"prefix": "avatars/", "max_size": 100}
     client.blob.s3_credentials(workspace_id="w")
-    assert t.calls[9].path == "/v1/s3/credentials" and _q(t.calls[9]) == {"workspace_id": ["w"]}
+    assert t.calls[10].path == "/v1/s3/credentials" and _q(t.calls[10]) == {"workspace_id": ["w"]}
     client.blob.uploads()
     client.blob.abort_upload("u1")
-    assert (t.calls[11].method, t.calls[11].path) == ("DELETE", "/v1/uploads/u1")
+    assert (t.calls[12].method, t.calls[12].path) == ("DELETE", "/v1/uploads/u1")
 
 
 def test_blob_error_code_passes_through() -> None:
