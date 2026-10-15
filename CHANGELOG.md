@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/vertracloud/sdk-api-py/compare/v0.2.0...v0.2.1) (2026-10-15)
+
+
+### Features
+
+* **blob:** add rename_on_conflict to put and copy ([6773c4c](https://github.com/vertracloud/sdk-api-py/commit/6773c4cfa63032875dfe1b3f92967fe3128b4e7c))
+
 ## [0.2.0](https://github.com/vertracloud/sdk-api-py/compare/v0.1.5...v0.2.0) (2026-10-15)
 
 
