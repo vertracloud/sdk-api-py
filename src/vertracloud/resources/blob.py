@@ -240,6 +240,7 @@ class BlobResource:
         visibility: BlobVisibility | None = None,
         overwrite: bool | None = None,
         random_suffix: bool | None = None,
+        rename_on_conflict: bool | None = None,
         cache_control: str | None = None,
         content_disposition: str | None = None,
         filename: str | None = None,
@@ -253,11 +254,14 @@ class BlobResource:
         Up to 5 MB: `POST /objects` (multipart). Larger: `POST /uploads`, then a presigned
         PUT (single) or parts (multipart) and `/complete`. `on_progress(loaded, total)` is
         called as bytes are sent. If a large upload is interrupted, call `resume`.
+        `rename_on_conflict=True` saves a taken path as `name-1.ext`, `name-2.ext`, … (not with `overwrite`);
+        the returned object has the final path.
         """
         opts: dict[str, Any] = {
             "visibility": visibility,
             "overwrite": overwrite,
             "random_suffix": random_suffix,
+            "rename_on_conflict": rename_on_conflict,
             "cache_control": cache_control,
             "content_disposition": content_disposition,
             "filename": filename,
@@ -428,7 +432,10 @@ class BlobResource:
         return results
 
     def copy(self, id: str, path: str, *, workspace_id: str | None = None, **opts: Any) -> APIBlobObject:
-        """POST /objects/copy — `overwrite`, `random_suffix`, `visibility`, `move` as options."""
+        """POST /objects/copy — `overwrite`, `random_suffix`, `visibility`, `move` as options.
+
+        `rename_on_conflict=True` (copy only) saves a taken path, even the source's own, as `name-1.ext`.
+        """
         return self._json(
             "POST", "/objects/copy", json_body={"source": id, "path": path, **opts}, query=_ws(workspace_id)
         )

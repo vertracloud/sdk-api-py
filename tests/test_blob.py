@@ -74,6 +74,16 @@ def test_put_small_is_multipart_on_objects() -> None:
     assert len(t.calls) == 1
 
 
+def test_put_and_copy_send_rename_on_conflict() -> None:
+    client, t = _setup()
+    t.queue_json({"response": OBJ})
+    t.queue_json({"response": OBJ})
+    client.blob.put("a/b.txt", b"hi", rename_on_conflict=True)
+    assert _q(t.calls[0])["rename_on_conflict"] == ["true"]
+    client.blob.copy("o1", "a/b.txt", rename_on_conflict=True)
+    assert json.loads(t.calls[1].body or b"{}") == {"source": "o1", "path": "a/b.txt", "rename_on_conflict": True}
+
+
 def test_put_from_path(tmp_path: Path) -> None:
     f = tmp_path / "x.txt"
     f.write_bytes(b"from-disk")
