@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/vertracloud/sdk-api-py/compare/v0.1.5...v0.2.0) (2026-10-15)
+
+
+### Features
+
+* add Blob Storage resource ([77cb94d](https://github.com/vertracloud/sdk-api-py/commit/77cb94d692612fb8a663330208738c89f402a4c7))
+* add expires_at to Pix payment and order status ([fa087b8](https://github.com/vertracloud/sdk-api-py/commit/fa087b887b17c4f188713e3c8002ad5065fc81fa))
+* web_content on blob custom domains ([6cc7d84](https://github.com/vertracloud/sdk-api-py/commit/6cc7d84538ab666737bafe9b697f5db0410a95c7))
+
 ## [0.1.5](https://github.com/vertracloud/sdk-api-py/compare/v0.1.4...v0.1.5) (2026-10-12)
 
 
