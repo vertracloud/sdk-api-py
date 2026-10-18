@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/vertracloud/sdk-api-py/compare/v0.2.1...v0.2.2) (2026-10-18)
+
+
+### Bug Fixes
+
+* support async app creation (building status, wait_until_ready) ([044a73f](https://github.com/vertracloud/sdk-api-py/commit/044a73f981f540e1e070d52c0243469448243e46))
+
 ## [0.2.1](https://github.com/vertracloud/sdk-api-py/compare/v0.2.0...v0.2.1) (2026-10-15)
 
 
