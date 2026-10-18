@@ -16,7 +16,7 @@ from .sse import SseStream
 from .transport import Response, Transport, UrllibTransport
 from .types import JsonValue
 
-__version__ = "0.2.1"  # x-release-please-version
+__version__ = "0.2.2"  # x-release-please-version
 
 DEFAULT_BASE_URL = "https://api.vertracloud.app"
 DEFAULT_BLOB_BASE_URL = "https://blob.vertracloud.app/v1"
