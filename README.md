@@ -123,6 +123,23 @@ with open("backup.zip", "wb") as f:
 
 `client.snapshots.download` works the same way.
 
+### Waiting for the first build
+
+`apps.create` replies right away with `status: "building"`. Wait for the build to end:
+
+```python
+app = client.apps.create({"name": "my-app", "memory": 512}, file=data)
+try:
+    app = client.apps.wait_until_ready(app["id"], timeout=600, interval=2)  # status is "up"
+# ended "down": e.code is app["last_build_error"] (e.g. "INSTALL_OUT_OF_MEMORY"), "APP_DOWN" if none
+except vertracloud.AppBuildFailedError as e:
+    print(client.apps.logs(app["id"]))
+except vertracloud.WaitTimeoutError:  # still building after `timeout` seconds
+    ...
+```
+
+`missing_dependencies` on the app is filled only after the build ends. Before it ends, calls that need a stopped or running app can fail with `APP_BUILDING` (409).
+
 ### Realtime logs (SSE)
 
 ```python

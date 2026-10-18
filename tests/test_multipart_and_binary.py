@@ -118,3 +118,39 @@ def test_snapshot_download_returns_bytes() -> None:
     transport.queue_binary(b"zip-content")
     client = VertraClient(api_key="k", transport=transport)
     assert client.snapshots.download("user-1", "snap-1", "applications") == b"zip-content"
+
+
+def _app(status: str) -> dict:
+    return {"response": {"id": "app-1", "status": status}}
+
+
+def test_wait_until_ready_returns_app_when_up() -> None:
+    from vertracloud import VertraClient
+
+    transport = FakeTransport()
+    transport.queue_json(_app("building"))
+    transport.queue_json(_app("up"))
+    client = VertraClient(api_key="k", transport=transport)
+    assert client.apps.wait_until_ready("app-1", interval=0)["status"] == "up"
+    assert len(transport.calls) == 2
+
+
+def test_wait_until_ready_raises_on_down_and_timeout() -> None:
+    from vertracloud import AppBuildFailedError, VertraClient, WaitTimeoutError
+
+    transport = FakeTransport()
+    transport.queue_json(_app("down"))
+    client = VertraClient(api_key="k", transport=transport)
+    with pytest.raises(AppBuildFailedError) as down:
+        client.apps.wait_until_ready("app-1", interval=0)
+    assert down.value.code == "APP_DOWN"
+
+    transport.queue_json({"response": {"id": "app-1", "status": "down", "last_build_error": "INSTALL_OUT_OF_MEMORY"}})
+    with pytest.raises(AppBuildFailedError) as oom:
+        client.apps.wait_until_ready("app-1", interval=0)
+    assert oom.value.code == "INSTALL_OUT_OF_MEMORY"
+
+    transport.default_json = _app("building")
+    with pytest.raises(WaitTimeoutError) as slow:
+        client.apps.wait_until_ready("app-1", timeout=0, interval=0)
+    assert slow.value.code == "WAIT_TIMEOUT"

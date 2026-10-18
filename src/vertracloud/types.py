@@ -249,7 +249,16 @@ class PutBillingDetailsBody(_PutBillingDetailsRequired, total=False):
 ApplicationLanguage = Literal[
     "javascript", "typescript", "bun", "python", "static", "php", "go", "ruby", "java", "rust"
 ]
-ApplicationStatus = Literal["up", "down"]
+ApplicationStatus = Literal["up", "down", "building"]
+ApplicationBuildError = Literal[
+    "BUILD_FAILED",
+    "BUILD_TIMEOUT",
+    "BUILD_INTERRUPTED",
+    "INSTALL_FAILED",
+    "INSTALL_OUT_OF_MEMORY",
+    "INSTALL_TIMEOUT",
+    "INSTALL_SHIELD_BLOCKED",
+]
 ApplicationFileType = Literal["file", "directory"]
 DatabaseStatus = Literal["up", "down"]
 ResourceType = Literal[1, 2]
@@ -298,6 +307,7 @@ class _APIApplicationRequired(TypedDict):
     offline_since: str | None
     shield_cooldown: APIApplicationShieldCooldown | None
     deploy: APIApplicationDeploySettings
+    last_build_error: ApplicationBuildError | None
 
 
 class APIApplication(_APIApplicationRequired, total=False):

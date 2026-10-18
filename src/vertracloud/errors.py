@@ -70,6 +70,25 @@ class RateLimitError(VertraAPIError):
         )
 
 
+class AppNotReadyError(Exception):
+    """`apps.wait_until_ready` ended without a running app. `app` is the last payload seen
+    (`None` on timeout before any reply). The cause of a `down` build is in `apps.logs`."""
+
+    def __init__(self, message: str, *, code: str, app: Any = None) -> None:
+        self.code = code
+        self.app = app
+        super().__init__(f"{code}: {message}")
+
+
+class AppBuildFailedError(AppNotReadyError):
+    """The build ended with the app `down`. `code` is the app's `last_build_error` (e.g.
+    `INSTALL_OUT_OF_MEMORY`), or `APP_DOWN` when the API sent none."""
+
+
+class WaitTimeoutError(AppNotReadyError):
+    """`wait_until_ready` timed out while the app was still `building` (`code` is `WAIT_TIMEOUT`)."""
+
+
 def error_from_response(status: int, body: dict[str, Any]) -> VertraAPIError:
     """Picks the class from the HTTP status; `code` comes from the error response body."""
     code = str(body.get("code") or "UNKNOWN_ERROR")

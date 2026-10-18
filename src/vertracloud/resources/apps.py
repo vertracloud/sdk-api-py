@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Any
 
 from ..client import LARGE_PAYLOAD_TIMEOUT, MultipartField, encode_path_param
+from ..errors import AppBuildFailedError, WaitTimeoutError
 from ..sse import SseStream
 from ..types import (
     APIAppFileUploadResponse,
@@ -442,7 +444,8 @@ class AppsResource:
     ) -> APIApplication:
         """POST /v1/apps — scope `apps:write`. Multipart: field `file` (zip) OR `snapshot_id`
         in `body`, other fields as text parts. Rate limit 15/min, plus the plan's
-        deploys-per-hour cap.
+        deploys-per-hour cap. Replies 202 with `status: "building"`: the build continues in the
+        background — use `wait_until_ready`, `logs` or `realtime` to follow it.
         Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/create
         """
         fields: list[MultipartField] = []
@@ -462,6 +465,32 @@ class AppsResource:
         return self._c.request_multipart(
             "POST", "/v1/apps", fields=fields, timeout=timeout if timeout is not None else LARGE_PAYLOAD_TIMEOUT
         )
+
+    def wait_until_ready(
+        self,
+        app_id: str,
+        *,
+        timeout: float = 600.0,
+        interval: float = 2.0,
+        workspace_id: str | None = None,
+    ) -> APIApplication:
+        """Polls `GET /v1/apps/:id` while `status` is `building`. Returns the app when it is `up`;
+        raises `AppBuildFailedError` when it ends `down` and `WaitTimeoutError` after `timeout`
+        seconds. API errors from the polling propagate unchanged."""
+        deadline = time.monotonic() + timeout
+        while True:
+            app = self.get(app_id, workspace_id=workspace_id)
+            if app["status"] == "up":
+                return app
+            if app["status"] == "down":
+                raise AppBuildFailedError(
+                    "the build ended and the app is down; read apps.logs for the cause",
+                    code=app.get("last_build_error") or "APP_DOWN",
+                    app=app,
+                )
+            if time.monotonic() + interval > deadline:
+                raise WaitTimeoutError(f"still building after {timeout:g}s", code="WAIT_TIMEOUT", app=app)
+            time.sleep(interval)
 
     def start(self, app_id: str, *, workspace_id: str | None = None) -> APIApplicationOperationResponse:
         """POST /v1/apps/:id/start — scope `apps:write`."""
