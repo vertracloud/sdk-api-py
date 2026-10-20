@@ -1,4 +1,4 @@
-"""`apps` domain — 40 routes (scopes `apps:read/write/delete/envs/files`).
+"""`apps` domain — 42 routes (scopes `apps:read/write/delete/envs/files`).
 
 `workspace_id` is accepted as an optional query parameter on almost every method.
 """
@@ -12,9 +12,13 @@ from ..client import LARGE_PAYLOAD_TIMEOUT, MultipartField, encode_path_param
 from ..errors import AppBuildFailedError, WaitTimeoutError
 from ..sse import SseStream
 from ..types import (
+    AddDomainBody,
     APIAppFileUploadResponse,
     APIApplication,
     APIApplicationDeployment,
+    APIApplicationDomain,
+    APIApplicationDomainConnect,
+    APIApplicationDomainDnsRecord,
     APIApplicationEnvironment,
     APIApplicationFileContent,
     APIApplicationFileTree,
@@ -26,14 +30,11 @@ from ..types import (
     APIApplicationStatus,
     APIApplicationStatusShort,
     APIApplicationWebPublish,
-    APICustomDomainResponse,
-    APIDnsRecord,
     APIRuntimesResponse,
     APISubdomainResponse,
     APIWebhookUrl,
     CreateAppBody,
     CreateWebhookBody,
-    CustomDomainBody,
     EnvironmentSetBody,
     JsonValue,
     MoveFileBody,
@@ -43,6 +44,7 @@ from ..types import (
     RollbackAppBody,
     SetSubdomainBody,
     UpdateAppConfigBody,
+    UpdateDomainBody,
 )
 
 if TYPE_CHECKING:
@@ -51,6 +53,8 @@ if TYPE_CHECKING:
 # Aliases so `list[...]` doesn't resolve to the `list` method inside the class itself.
 EnvList = list[APIApplicationEnvironment]
 FileTreeList = list[APIApplicationFileTree]
+DomainList = list[APIApplicationDomain]
+DomainDnsList = list[APIApplicationDomainDnsRecord]
 
 
 class AppDeploysWebhookResource:
@@ -167,44 +171,65 @@ class AppReleasesResource:
         )
 
 
-class AppCustomDomainResource:
+class AppDomainsResource:
     def __init__(self, client: VertraClient) -> None:
         self._c = client
 
-    def get(self, app_id: str, *, workspace_id: str | None = None) -> APICustomDomainResponse:
-        """GET /v1/apps/:id/network/custom — scope `apps:read`."""
+    def list(self, app_id: str, *, workspace_id: str | None = None) -> DomainList:
+        """GET /v1/apps/:id/domains — scope `apps:read`. Automatic companions included."""
         return self._c.request_json(
-            "GET", f"/v1/apps/{encode_path_param(app_id)}/network/custom", query={"workspace_id": workspace_id}
+            "GET", f"/v1/apps/{encode_path_param(app_id)}/domains", query={"workspace_id": workspace_id}
         )
 
-    def set(self, app_id: str, body: CustomDomainBody, *, workspace_id: str | None = None) -> APICustomDomainResponse:
-        """POST /v1/apps/:id/network/custom — scope `apps:write`.
-        Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/network/customdomain
-        """
+    def add(self, app_id: str, body: AddDomainBody, *, workspace_id: str | None = None) -> DomainList:
+        """POST /v1/apps/:id/domains — scope `apps:write`. Returns the created domain and its companion."""
         return self._c.request_json(
             "POST",
-            f"/v1/apps/{encode_path_param(app_id)}/network/custom",
+            f"/v1/apps/{encode_path_param(app_id)}/domains",
             json_body=body,
             query={"workspace_id": workspace_id},
         )
 
-    def remove(self, app_id: str, *, workspace_id: str | None = None) -> None:
-        """DELETE /v1/apps/:id/network/custom — scope `apps:write`."""
+    def update(
+        self, app_id: str, domain_id: str, body: UpdateDomainBody, *, workspace_id: str | None = None
+    ) -> DomainList:
+        """PATCH /v1/apps/:id/domains/:domain_id — scope `apps:write`."""
         return self._c.request_json(
-            "DELETE", f"/v1/apps/{encode_path_param(app_id)}/network/custom", query={"workspace_id": workspace_id}
+            "PATCH",
+            f"/v1/apps/{encode_path_param(app_id)}/domains/{encode_path_param(domain_id)}",
+            json_body=body,
+            query={"workspace_id": workspace_id},
+        )
+
+    def remove(self, app_id: str, domain_id: str, *, workspace_id: str | None = None) -> None:
+        """DELETE /v1/apps/:id/domains/:domain_id — scope `apps:write`. Also removes the automatic companion."""
+        return self._c.request_json(
+            "DELETE",
+            f"/v1/apps/{encode_path_param(app_id)}/domains/{encode_path_param(domain_id)}",
+            query={"workspace_id": workspace_id},
+        )
+
+    def dns(self, app_id: str, domain_id: str, *, workspace_id: str | None = None) -> DomainDnsList:
+        """GET /v1/apps/:id/domains/:domain_id/dns — scope `apps:read`."""
+        return self._c.request_json(
+            "GET",
+            f"/v1/apps/{encode_path_param(app_id)}/domains/{encode_path_param(domain_id)}/dns",
+            query={"workspace_id": workspace_id},
+        )
+
+    def connect(self, app_id: str, domain_id: str, *, workspace_id: str | None = None) -> APIApplicationDomainConnect:
+        """POST /v1/apps/:id/domains/:domain_id/connect — scope `apps:write`. Raises a 404
+        `DOMAIN_CONNECT_UNAVAILABLE` when the DNS provider does not support it."""
+        return self._c.request_json(
+            "POST",
+            f"/v1/apps/{encode_path_param(app_id)}/domains/{encode_path_param(domain_id)}/connect",
+            query={"workspace_id": workspace_id},
         )
 
 
 class AppNetworkResource:
     def __init__(self, client: VertraClient) -> None:
         self._c = client
-        self.custom_domain = AppCustomDomainResource(client)
-
-    def dns(self, app_id: str, *, workspace_id: str | None = None) -> list[APIDnsRecord]:
-        """GET /v1/apps/:id/network/dns — scope `apps:read`."""
-        return self._c.request_json(
-            "GET", f"/v1/apps/{encode_path_param(app_id)}/network/dns", query={"workspace_id": workspace_id}
-        )
 
     def purge_cache(self, app_id: str, body: PurgeCacheBody | None = None, *, workspace_id: str | None = None) -> None:
         """POST /v1/apps/:id/network/purge-cache — scope `apps:write`. An empty `{}` body is valid."""
@@ -364,12 +389,13 @@ class AppFilesResource:
 
 class AppsResource:
     """`apps.*` — get/status/statusAll/runtimes/realtime/metrics/logs/download/create/start/
-    stop/restart/updateConfig/delete + `deploys`, `releases`, `network`, `envs`, `files`."""
+    stop/restart/updateConfig/delete + `deploys`, `releases`, `domains`, `network`, `envs`, `files`."""
 
     def __init__(self, client: VertraClient) -> None:
         self._c = client
         self.deploys = AppDeploysResource(client)
         self.releases = AppReleasesResource(client)
+        self.domains = AppDomainsResource(client)
         self.network = AppNetworkResource(client)
         self.envs = AppEnvsResource(client)
         self.files = AppFilesResource(client)

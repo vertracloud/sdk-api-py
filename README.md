@@ -29,7 +29,8 @@ from vertracloud import VertraClient
 client = VertraClient(api_key=os.environ["VERTRA_API_KEY"])
 
 me = client.account.get()
-print(f"Hi {me['name']}! Plan: {me['plan']['name']}")
+plan = me["plan"]
+print(f"Hi {me['name']}! Plan: {plan['name'] if plan else 'none'}")
 
 for app in me["applications"]:
     print(app["id"], app["name"], app["status"])
@@ -79,6 +80,25 @@ client.apps.restart(app_id, {"reinstall_dependencies": True})
 metrics = client.apps.metrics(app_id, range="24h")
 logs = client.apps.logs(app_id)
 ```
+
+### Custom domains
+
+An app can have several domains, each with its own port, path prefix or redirect. `add` returns the created
+domain and its automatic `www` (or root) companion; the limit depends on your plan.
+
+```python
+domains = client.apps.domains.add(app_id, {"hostname": "example.com", "port": 8080})
+main = domains[0]
+
+for record in client.apps.domains.dns(app_id, main["id"]):
+    print(record["type"], record["name"], record["value"], record["status"])
+
+client.apps.domains.update(app_id, domains[1]["id"], {"redirect_to": main["id"], "redirect_status": 301})
+client.apps.domains.remove(app_id, main["id"])
+```
+
+`client.apps.domains.connect(app_id, domain_id)` returns a link that configures the DNS records at providers that
+support it, or raises a 404 `DOMAIN_CONNECT_UNAVAILABLE`.
 
 ### Releases and rollback
 
@@ -206,7 +226,7 @@ client = VertraClient(api_key="test", transport=my_fake_transport)
 
 | Domain | Resource | Routes |
 |---|---|---|
-| Apps | `client.apps` (+ `.deploys`, `.releases`, `.network`, `.envs`, `.files`) | 40 |
+| Apps | `client.apps` (+ `.deploys`, `.releases`, `.domains`, `.network`, `.envs`, `.files`) | 42 |
 | Databases | `client.databases` (+ `.credentials`) | 13 |
 | Snapshots | `client.snapshots` | 5 |
 | Account | `client.account` (+ `.sessions`, `.folders`, `.favorites`) | 10 |

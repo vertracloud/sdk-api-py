@@ -9,6 +9,27 @@ from __future__ import annotations
 
 from typing import Any, Literal, TypedDict
 
+UserPlanName = Literal[
+    "economy",
+    "pro",
+    "scale",
+    "intermediary",
+    "enterprise-4",
+    "enterprise-6",
+    "enterprise-8",
+    "enterprise-12",
+    "enterprise-14",
+    "enterprise-16",
+    "enterprise-18",
+    "enterprise-20",
+    "enterprise-22",
+    "enterprise-24",
+    "enterprise-26",
+    "enterprise-28",
+    "enterprise-30",
+    "enterprise-32",
+]
+
 JsonValue = Any
 JsonObject = dict[str, Any]
 
@@ -87,8 +108,35 @@ class RestartAppBody(TypedDict, total=False):
     force_build: bool
 
 
-class CustomDomainBody(TypedDict):
-    domain: str
+ApplicationDomainStatus = Literal["pending", "active", "moved", "deleted"]
+ApplicationDomainSslStatus = Literal["pending", "active", "failed"]
+ApplicationDomainRedirectStatus = Literal[301, 302, 307, 308]
+
+
+class _AddDomainRequired(TypedDict):
+    hostname: str
+
+
+class AddDomainBody(_AddDomainRequired, total=False):
+    """`POST /v1/apps/:id/domains`. `www` defaults to `True` on the server; `redirect_status`
+    only applies with `redirect_to`."""
+
+    www: bool
+    port: int
+    path_prefix: str
+    redirect_to: str
+    redirect_status: ApplicationDomainRedirectStatus
+
+
+class UpdateDomainBody(TypedDict, total=False):
+    """`PATCH /v1/apps/:id/domains/:domain_id`. Send only what changes; `None` clears `path_prefix`
+    or `redirect_to`. `primary=True` swaps the domain with its companion as the main one."""
+
+    port: int
+    path_prefix: str | None
+    redirect_to: str | None
+    redirect_status: ApplicationDomainRedirectStatus
+    primary: Literal[True]
 
 
 class SetSubdomainBody(TypedDict):
@@ -284,19 +332,44 @@ class APIApplicationDeploySettings(TypedDict):
     health_check_path: str | None
 
 
+class APIApplicationDomain(TypedDict):
+    id: str
+    hostname: str
+    apex: bool
+    companion_of: str | None
+    redirect_to: str | None
+    redirect_status: ApplicationDomainRedirectStatus
+    path_prefix: str | None
+    port: int
+    status: ApplicationDomainStatus
+    ssl_status: ApplicationDomainSslStatus
+    created_at: str
+
+
+class APIApplicationDomainDnsRecord(TypedDict):
+    type: Literal["CNAME", "TXT"]
+    name: str
+    value: str
+    status: Literal["pending", "active"]
+
+
+class APIApplicationDomainConnect(TypedDict):
+    url: str
+
+
 class _APIApplicationRequired(TypedDict):
     id: str
     cluster: int
     type: int
     name: str
     owner_id: str
-    owner_plan_id: str
+    owner_plan: UserPlanName | None
     language: ApplicationLanguage
     ram: int
     status: ApplicationStatus
     subdomain: str | None
     public_url: str | None
-    custom_domain: str | None
+    domains: list[APIApplicationDomain]
     last_snapshot: str | None
     created_at: str
     updated_at: str
@@ -443,13 +516,6 @@ class APIApplicationRollbackPreview(TypedDict):
     environment_changes: list[APIApplicationEnvironmentChange]
 
 
-class APIDnsRecord(TypedDict):
-    type: str
-    name: str
-    value: str
-    status: str
-
-
 class APIWebhookUrl(TypedDict):
     url: str
 
@@ -458,13 +524,9 @@ class APISubdomainResponse(TypedDict):
     subdomain: str
 
 
-class APICustomDomainResponse(TypedDict):
-    domain: str
-
-
 class APIApplicationWebPublish(TypedDict):
     subdomain: str | None
-    custom_domain: str | None
+    domains: list[str]
     type: int
 
 
@@ -516,7 +578,7 @@ class APIDatabase(TypedDict):
     name: str
     description: str
     owner_id: str
-    owner_plan_id: str
+    owner_plan: UserPlanName | None
     status: DatabaseStatus
     ram: int
     host: str
@@ -595,7 +657,6 @@ class APIUser(TypedDict):
     id: str
     name: str
     email: str
-    plan_id: str
     language: str
     workspace_invites_enabled: bool
     created_at: str
@@ -614,9 +675,8 @@ class APIUserPlanMemory(TypedDict):
 
 
 class APIUserPlan(TypedDict):
-    id: str
-    name: str
-    expires_at: str | None
+    name: UserPlanName
+    expires_at: str
     duration: int
     memory: APIUserPlanMemory
 
@@ -654,7 +714,7 @@ class APIWorkspaceResourceOrganization(TypedDict):
 
 
 class APIUserInfoResponse(APIUser):
-    plan: APIUserPlan
+    plan: APIUserPlan | None
     applications: list[APIApplication]
     databases: list[APIDatabase]
     connections: list[APIUserConnection]
@@ -724,7 +784,7 @@ class APIWorkspaceInfoResponse(APIWorkspace):
     databases: list[APIDatabase]
     permissions: list[str]
     is_owner: bool
-    owner_plan_id: str
+    owner_plan: UserPlanName | None
     resource_organization: APIWorkspaceResourceOrganization
 
 

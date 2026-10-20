@@ -1,9 +1,14 @@
-"""Local fixture with the 105 routes from the API key catalog, and the list of forbidden
+"""Local fixture with the 107 routes from the API key catalog, and the list of forbidden
 paths. `tests/test_routes_matrix.py` proves exact coverage and exclusion."""
 
 from __future__ import annotations
 
 FROZEN_ROUTES: list[tuple[str, str]] = [
+    ("GET", "/v1/apps/:id/domains"),
+    ("GET", "/v1/apps/:id/domains/:domain_id/dns"),
+    ("PATCH", "/v1/apps/:id/domains/:domain_id"),
+    ("POST", "/v1/apps/:id/domains"),
+    ("POST", "/v1/apps/:id/domains/:domain_id/connect"),
     ("DELETE", "/v1/workspaces/:id"),
     ("DELETE", "/v1/workspaces/:id/invites/:invite_id"),
     ("GET", "/v1/workspaces/:id/action-requests"),
@@ -16,7 +21,7 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("DELETE", "/v1/apps/:id/deploys/webhook"),
     ("DELETE", "/v1/apps/:id/envs/:envId"),
     ("DELETE", "/v1/apps/:id/files"),
-    ("DELETE", "/v1/apps/:id/network/custom"),
+    ("DELETE", "/v1/apps/:id/domains/:domain_id"),
     ("DELETE", "/v1/apps/:id/network/publish"),
     ("DELETE", "/v1/databases/:id"),
     ("DELETE", "/v1/users/me/favorites/:resource_type/:resource_id"),
@@ -42,8 +47,6 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("GET", "/v1/apps/:id/files/tree"),
     ("GET", "/v1/apps/:id/logs"),
     ("GET", "/v1/apps/:id/metrics"),
-    ("GET", "/v1/apps/:id/network/custom"),
-    ("GET", "/v1/apps/:id/network/dns"),
     ("GET", "/v1/apps/:id/realtime"),
     ("GET", "/v1/apps/:id/status"),
     ("GET", "/v1/apps/runtimes"),
@@ -75,7 +78,6 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("POST", "/v1/apps/:id/deploys/webhook"),
     ("POST", "/v1/apps/:id/envs"),
     ("POST", "/v1/apps/:id/files/upload"),
-    ("POST", "/v1/apps/:id/network/custom"),
     ("POST", "/v1/apps/:id/network/publish"),
     ("POST", "/v1/apps/:id/network/purge-cache"),
     ("POST", "/v1/apps/:id/releases/:release_id/rollback"),
@@ -111,7 +113,7 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("PUT", "/v1/workspaces/:id/roles/:role_id"),
 ]
 
-assert len(FROZEN_ROUTES) == 105, f"expected 105 frozen routes, found {len(FROZEN_ROUTES)}"
+assert len(FROZEN_ROUTES) == 107, f"expected 107 frozen routes, found {len(FROZEN_ROUTES)}"
 
 # Forbidden paths: none of these may appear, in any form, in `src/vertracloud/**`.
 FORBIDDEN_PATHS: list[str] = [

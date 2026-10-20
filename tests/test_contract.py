@@ -353,3 +353,56 @@ def test_update_config_deploy_absent_vs_none() -> None:
     assert _body(_call(transport, 1)) == {"deploy": {"health_check_path": None}}
     assert "deploy" not in _body(_call(transport, 2))
     assert b'"health_check_path": null' in (_call(transport, 1).body or b"")
+
+
+# -- apps.domains -----------------------------------------------------------------------
+
+
+def test_domains_list_method_path_and_workspace_query() -> None:
+    client, transport = _client()
+    transport.queue_json([])
+    client.apps.domains.list(ID, workspace_id=ID2)
+    call = _call(transport)
+    assert (call.method, urlparse(call.url).path) == ("GET", f"/v1/apps/{ID}/domains")
+    assert _query(call) == {"workspace_id": [ID2]}
+
+
+def test_domains_add_sends_body_as_is() -> None:
+    client, transport = _client()
+    transport.queue_json([])
+    client.apps.domains.add(ID, {"hostname": "example.com", "www": False, "redirect_status": 301})
+    call = _call(transport)
+    assert (call.method, urlparse(call.url).path) == ("POST", f"/v1/apps/{ID}/domains")
+    assert _body(call) == {"hostname": "example.com", "www": False, "redirect_status": 301}
+
+
+def test_domains_update_sends_null_to_clear_fields() -> None:
+    client, transport = _client()
+    transport.queue_json([])
+    client.apps.domains.update(ID, ID2, {"path_prefix": None, "redirect_to": None, "primary": True})
+    call = _call(transport)
+    assert (call.method, urlparse(call.url).path) == ("PATCH", f"/v1/apps/{ID}/domains/{ID2}")
+    assert _body(call) == {"path_prefix": None, "redirect_to": None, "primary": True}
+
+
+def test_domains_remove_dns_and_connect_paths() -> None:
+    client, transport = _client()
+    transport.queue_json(None)
+    transport.queue_json([])
+    transport.queue_json({"url": "https://example.test/connect"})
+    client.apps.domains.remove(ID, ID2)
+    client.apps.domains.dns(ID, ID2)
+    connected = client.apps.domains.connect(ID, ID2)
+    paths = [(c.method, urlparse(c.url).path) for c in transport.calls]
+    assert paths == [
+        ("DELETE", f"/v1/apps/{ID}/domains/{ID2}"),
+        ("GET", f"/v1/apps/{ID}/domains/{ID2}/dns"),
+        ("POST", f"/v1/apps/{ID}/domains/{ID2}/connect"),
+    ]
+    assert connected == {"url": "https://example.test/connect"}
+
+
+def test_network_has_no_custom_domain_or_dns() -> None:
+    client, _ = _client()
+    assert not hasattr(client.apps.network, "custom_domain")
+    assert not hasattr(client.apps.network, "dns")
