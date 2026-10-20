@@ -9,7 +9,7 @@ import mimetypes
 import uuid
 from collections.abc import Iterable
 from typing import Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, unquote, urlencode
 
 from .errors import error_from_response
 from .sse import SseStream
@@ -25,9 +25,28 @@ DEFAULT_TIMEOUT = 30.0
 LARGE_PAYLOAD_TIMEOUT = 120.0
 
 
+def _is_dot_segment(value: str) -> bool:
+    current = value
+    for _ in range(4):
+        if current in ("", ".", ".."):
+            return True
+        decoded = unquote(current)
+        if decoded == current:
+            return False
+        current = decoded
+    return False
+
+
 def encode_path_param(value: str) -> str:
-    """`quote(safe="")` — a path param never lets `/`, `?`, etc. leak into the URL structure."""
-    return quote(str(value), safe="")
+    """`quote(safe="")` — a path param never lets `/`, `?`, etc. leak into the URL structure.
+
+    Raises `ValueError` (before any request) for an empty value, `.` or `..`, also when percent-encoded:
+    servers and URL parsers collapse dot-segments, so the call would reach a different route.
+    """
+    text = str(value)
+    if _is_dot_segment(text):
+        raise ValueError(f"Invalid path segment: {text!r}")
+    return quote(text, safe="")
 
 
 class MultipartField:
