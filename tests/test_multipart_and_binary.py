@@ -154,3 +154,46 @@ def test_wait_until_ready_raises_on_down_and_timeout() -> None:
     with pytest.raises(WaitTimeoutError) as slow:
         client.apps.wait_until_ready("app-1", timeout=0, interval=0)
     assert slow.value.code == "WAIT_TIMEOUT"
+
+
+def _parse_parts(body: bytes, boundary: str) -> list[tuple[str, str | None, bytes]]:
+    from email.parser import BytesParser
+    from email.policy import HTTP
+
+    raw = b"Content-Type: multipart/form-data; boundary=" + boundary.encode() + b"\r\n\r\n" + body
+    msg = BytesParser(policy=HTTP).parsebytes(raw)
+    out = []
+    for part in msg.iter_parts():
+        out.append(
+            (part.get_param("name", header="content-disposition"), part.get_filename(), part.get_payload(decode=True))
+        )
+    return out
+
+
+def test_multipart_filename_with_quote_and_semicolon_does_not_alter_parameters() -> None:
+    from vertracloud.client import MultipartField, _build_multipart
+
+    evil = 'a"; name="admin"; x=".zip'
+    body, boundary = _build_multipart([MultipartField("file", b"data", filename=evil)])
+    parts = _parse_parts(body, boundary)
+    assert len(parts) == 1
+    assert parts[0][0] == "file"
+    assert parts[0][1] == evil
+    assert b'filename="a\\"; name=\\"admin\\"' in body
+
+
+def test_multipart_backslash_is_escaped() -> None:
+    from vertracloud.client import MultipartField, _build_multipart
+
+    body, _ = _build_multipart([MultipartField("file", b"d", filename="a\\b.zip")])
+    assert b'filename="a\\\\b.zip"' in body
+
+
+@pytest.mark.parametrize("bad", ["a\r\nX-Injected: 1.zip", "a\nb.zip", "a\rb.zip"])
+def test_multipart_rejects_crlf_in_filename_and_field_name(bad: str) -> None:
+    from vertracloud.client import MultipartField, _build_multipart
+
+    with pytest.raises(ValueError, match="CR/LF"):
+        _build_multipart([MultipartField("file", b"d", filename=bad)])
+    with pytest.raises(ValueError, match="CR/LF"):
+        _build_multipart([MultipartField(bad, "v")])

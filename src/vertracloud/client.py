@@ -68,13 +68,24 @@ class MultipartField:
         self.content_type = content_type
 
 
+def _quote_param(value: str, what: str) -> str:
+    """Quote a Content-Disposition parameter like Go's `mime/multipart` (`\\` and `"` escaped).
+
+    CR/LF are rejected instead of rewritten: silently changing a file name would surprise the
+    caller, and a header line break is never a legitimate name.
+    """
+    if "\r" in value or "\n" in value:
+        raise ValueError(f"multipart {what} must not contain CR/LF")
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _build_multipart(fields: Iterable[MultipartField]) -> tuple[bytes, str]:
     boundary = f"----vertracloud-{uuid.uuid4().hex}"
     parts: list[bytes] = []
     for field in fields:
-        disposition = f'form-data; name="{field.name}"'
+        disposition = f'form-data; name="{_quote_param(field.name, "field name")}"'
         if field.filename:
-            disposition += f'; filename="{field.filename}"'
+            disposition += f'; filename="{_quote_param(field.filename, "filename")}"'
         header = f"--{boundary}\r\nContent-Disposition: {disposition}\r\n"
         content_type = field.content_type
         if content_type is None and field.filename:
