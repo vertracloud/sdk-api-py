@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/vertracloud/sdk-api-py/compare/v0.3.0...v0.3.1) (2026-10-22)
+
+
+### Features
+
+* **apps:** Deno, .NET and Elixir and language on create ([c7a7bb3](https://github.com/vertracloud/sdk-api-py/commit/c7a7bb3e4141d8f0c45853807acfd49719841100))
+* **apps:** remove cleanup_old_runtime_language from the restart body ([e8aa75d](https://github.com/vertracloud/sdk-api-py/commit/e8aa75daf69752af8ea16048e84e85857f613ff4))
+
 ## [0.3.0](https://github.com/vertracloud/sdk-api-py/compare/v0.2.2...v0.3.0) (2026-10-22)
 
 
