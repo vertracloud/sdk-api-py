@@ -21,6 +21,9 @@ Issues = "https://github.com/vertracloud/sdk-api-py/issues"
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "build>=1.2"]
 
+[tool.hatch.build.targets.sdist]
+include = ["src", "README.md", "LICENSE", "CHANGELOG.md", "pyproject.toml"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/vertracloud"]
 
