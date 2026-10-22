@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0](https://github.com/vertracloud/sdk-api-py/compare/v0.2.2...v0.3.0) (2026-10-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* plan names and multiple custom domains per app
+
+### Features
+
+* plan names and multiple custom domains per app ([1df9eab](https://github.com/vertracloud/sdk-api-py/commit/1df9eab6d548a6136409652419afd26dbd6c8b41))
+
+
+### Bug Fixes
+
+* drop the Authorization header when a redirect changes scheme, host or port ([70f5451](https://github.com/vertracloud/sdk-api-py/commit/70f5451d8ee02579344ac2fde46a16ed1b9952eb))
+* reject empty and dot path segments before sending a request ([2964db9](https://github.com/vertracloud/sdk-api-py/commit/2964db9c6da64ce0427ee4b4c2975b012edbad8e))
+* **upload:** escape quotes and reject CR/LF in multipart Content-Disposition ([e56ebb0](https://github.com/vertracloud/sdk-api-py/commit/e56ebb0ef9717cd45d766d94905225ede8c4466e))
+
 ## [0.2.2](https://github.com/vertracloud/sdk-api-py/compare/v0.2.1...v0.2.2) (2026-10-18)
 
 
