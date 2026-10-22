@@ -44,7 +44,6 @@ def test_upload_file_multipart_field_name_is_file() -> None:
             "response": {
                 "app_id": "app-1",
                 "updated_at": "2026-09-22T12:00:00.000Z",
-                "missing_dependencies": ["requests"],
                 "removed_directories": [],
             }
         }
@@ -58,7 +57,6 @@ def test_upload_file_multipart_field_name_is_file() -> None:
     assert result == {
         "app_id": "app-1",
         "updated_at": "2026-09-22T12:00:00.000Z",
-        "missing_dependencies": ["requests"],
         "removed_directories": [],
     }
 

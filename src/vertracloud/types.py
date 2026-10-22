@@ -66,6 +66,7 @@ class CreateAppBody(TypedDict, total=False):
     main: str
     subdomain: str
     version: str
+    language: ApplicationLanguage
     name: str
     description: str | None
     workspace_id: str
@@ -295,7 +296,19 @@ class PutBillingDetailsBody(_PutBillingDetailsRequired, total=False):
 # -- responses -------------------------------------------------------------
 
 ApplicationLanguage = Literal[
-    "javascript", "typescript", "bun", "python", "static", "php", "go", "ruby", "java", "rust"
+    "javascript",
+    "typescript",
+    "bun",
+    "python",
+    "static",
+    "php",
+    "go",
+    "ruby",
+    "java",
+    "rust",
+    "deno",
+    "dotnet",
+    "elixir",
 ]
 ApplicationStatus = Literal["up", "down", "building"]
 ApplicationBuildError = Literal[
@@ -386,7 +399,6 @@ class _APIApplicationRequired(TypedDict):
 class APIApplication(_APIApplicationRequired, total=False):
     description: str
     github: APIApplicationGithub | None
-    missing_dependencies: list[str]
 
 
 class APIApplicationNetwork(TypedDict):
@@ -427,7 +439,6 @@ class _APIAppFileUploadResponseRequired(TypedDict):
 
 
 class APIAppFileUploadResponse(_APIAppFileUploadResponseRequired, total=False):
-    missing_dependencies: list[str]
     removed_directories: list[str]
 
 
@@ -554,12 +565,19 @@ class APIApplicationFileContent(TypedDict):
     last_modified: str
 
 
-class APIApplicationScanSuggestions(TypedDict, total=False):
+class _APIApplicationScanSuggestionsRequired(TypedDict):
+    language: ApplicationLanguage | None
+    main: str | None
+    version: str | None
+    has_manifest: bool
+    candidates: list[ApplicationLanguage]
+
+
+class APIApplicationScanSuggestions(_APIApplicationScanSuggestionsRequired, total=False):
     suggested_start_command: str
     suggested_build_command: str
     suggested_memory_mb: int
     suggested_public_web: bool
-    missing_dependencies: list[str]
 
 
 class APIRuntimeEntry(TypedDict):

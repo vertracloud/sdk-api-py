@@ -158,7 +158,7 @@ except vertracloud.WaitTimeoutError:  # still building after `timeout` seconds
     ...
 ```
 
-`missing_dependencies` on the app is filled only after the build ends. Before it ends, calls that need a stopped or running app can fail with `APP_BUILDING` (409).
+While the build runs, calls that need a stopped or running app can fail with `APP_BUILDING` (409).
 
 ### Realtime logs (SSE)
 
