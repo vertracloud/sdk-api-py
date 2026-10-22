@@ -534,7 +534,7 @@ class AppsResource:
         self, app_id: str, body: RestartAppBody | None = None, *, workspace_id: str | None = None
     ) -> APIApplicationOperationResponse:
         """POST /v1/apps/:id/restart — scope `apps:write`. Flags: `reinstall_dependencies`,
-        `force_build`, `cleanup_old_runtime_language`."""
+        `force_build`."""
         return self._c.request_json(
             "POST",
             f"/v1/apps/{encode_path_param(app_id)}/restart",

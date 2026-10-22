@@ -104,7 +104,6 @@ class RollbackAppBody(TypedDict, total=False):
 
 
 class RestartAppBody(TypedDict, total=False):
-    cleanup_old_runtime_language: str
     reinstall_dependencies: bool
     force_build: bool
 
