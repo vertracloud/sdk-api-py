@@ -1,4 +1,4 @@
-"""Local fixture with the 107 routes from the API key catalog, and the list of forbidden
+"""Local fixture with the 121 routes from the API key catalog, and the list of forbidden
 paths. `tests/test_routes_matrix.py` proves exact coverage and exclusion."""
 
 from __future__ import annotations
@@ -24,6 +24,8 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("DELETE", "/v1/apps/:id/domains/:domain_id"),
     ("DELETE", "/v1/apps/:id/network/publish"),
     ("DELETE", "/v1/databases/:id"),
+    ("DELETE", "/v1/images/:image_id"),
+    ("DELETE", "/v1/images/:image_id/github"),
     ("DELETE", "/v1/users/me/favorites/:resource_type/:resource_id"),
     ("DELETE", "/v1/users/me/folders/:folder_id"),
     ("DELETE", "/v1/users/me/folders/:folder_id/resources/:resource_type/:resource_id"),
@@ -56,6 +58,12 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("GET", "/v1/databases/:id/metrics"),
     ("GET", "/v1/databases/:id/status"),
     ("GET", "/v1/databases/status"),
+    ("GET", "/v1/databases/versions"),
+    ("GET", "/v1/images"),
+    ("GET", "/v1/images/:image_id"),
+    ("GET", "/v1/images/:image_id/context"),
+    ("GET", "/v1/images/:image_id/logs"),
+    ("GET", "/v1/images/:image_id/versions"),
     ("GET", "/v1/orders"),
     ("GET", "/v1/orders/:orderId/status"),
     ("GET", "/v1/users/:id/snapshots"),
@@ -71,6 +79,7 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("PATCH", "/v1/apps/:id/config"),
     ("PATCH", "/v1/apps/:id/files"),
     ("PATCH", "/v1/apps/:id/network/subdomain"),
+    ("PATCH", "/v1/images/:image_id"),
     ("PATCH", "/v1/users/me"),
     ("PATCH", "/v1/users/me/folders/:folder_id"),
     ("PATCH", "/v1/workspaces/:id/folders/:folder_id"),
@@ -84,12 +93,15 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("POST", "/v1/apps/:id/restart"),
     ("POST", "/v1/apps/:id/start"),
     ("POST", "/v1/apps/:id/stop"),
+    ("POST", "/v1/apps/image"),
     ("POST", "/v1/databases"),
     ("POST", "/v1/databases/:id/credentials/certificate/reset"),
     ("POST", "/v1/databases/:id/credentials/reset"),
     ("POST", "/v1/databases/:id/reset"),
     ("POST", "/v1/databases/:id/start"),
     ("POST", "/v1/databases/:id/stop"),
+    ("POST", "/v1/images"),
+    ("POST", "/v1/images/check"),
     ("POST", "/v1/orders"),
     ("POST", "/v1/orders/:orderId/initiate/pix"),
     ("POST", "/v1/redeem/:code"),
@@ -103,6 +115,8 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("POST", "/v1/workspaces/:id/roles"),
     ("PUT", "/v1/apps/:id/files"),
     ("PUT", "/v1/databases/:id"),
+    ("PUT", "/v1/images/:image_id"),
+    ("PUT", "/v1/images/:image_id/github"),
     ("PUT", "/v1/users/me/billing"),
     ("PUT", "/v1/users/me/favorites/:resource_type/:resource_id"),
     ("PUT", "/v1/users/me/folders/:folder_id/resources/:resource_type/:resource_id"),
@@ -113,7 +127,7 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("PUT", "/v1/workspaces/:id/roles/:role_id"),
 ]
 
-assert len(FROZEN_ROUTES) == 107, f"expected 107 frozen routes, found {len(FROZEN_ROUTES)}"
+assert len(FROZEN_ROUTES) == 121, f"expected 121 frozen routes, found {len(FROZEN_ROUTES)}"
 
 # Forbidden paths: none of these may appear, in any form, in `src/vertracloud/**`.
 FORBIDDEN_PATHS: list[str] = [

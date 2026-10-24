@@ -136,11 +136,13 @@ class VertraClient:
         from .resources.billing import BillingResource
         from .resources.blob import BlobResource
         from .resources.databases import DatabasesResource
+        from .resources.images import ImagesResource
         from .resources.snapshots import SnapshotsResource
         from .resources.workspaces import WorkspacesResource
 
         self.apps = AppsResource(self)
         self.databases = DatabasesResource(self)
+        self.images = ImagesResource(self)
         self.snapshots = SnapshotsResource(self)
         self.account = AccountResource(self)
         self.workspaces = WorkspacesResource(self)

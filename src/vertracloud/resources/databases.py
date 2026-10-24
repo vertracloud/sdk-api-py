@@ -1,4 +1,4 @@
-"""`databases` domain — 13 routes (scopes `databases:read/write/delete/credentials`)."""
+"""`databases` domain — 14 routes (scopes `databases:read/write/delete/credentials`)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from ..types import (
     APIDatabasePasswordReset,
     APIDatabaseStatus,
     APIDatabaseStatusShort,
+    APIDatabaseVersions,
     APIOperationResponse,
     CreateDatabaseBody,
     UpdateDatabaseBody,
@@ -63,7 +64,7 @@ class DatabaseCredentialsResource:
 
 
 class DatabasesResource:
-    """`databases.*` — statusAll/get/status/metrics/create/update/start/stop/reset/delete +
+    """`databases.*` — status_all/versions/get/status/metrics/create/update/start/stop/reset/delete +
     `credentials`."""
 
     def __init__(self, client: VertraClient) -> None:
@@ -73,6 +74,12 @@ class DatabasesResource:
     def status_all(self, *, workspace_id: str | None = None) -> list[APIDatabaseStatusShort]:
         """GET /v1/databases/status — scope `databases:read`."""
         return self._c.request_json("GET", "/v1/databases/status", query={"workspace_id": workspace_id})
+
+    def versions(self) -> APIDatabaseVersions:
+        """GET /v1/databases/versions — scope `databases:read`. Catalog keyed by engine `type`:
+        `recommended` and `available` lines for new databases. A database's version cannot be
+        changed after creation; security updates are applied when it is stopped and started."""
+        return self._c.request_json("GET", "/v1/databases/versions")
 
     def get(self, db_id: str, *, workspace_id: str | None = None) -> APIDatabase:
         """GET /v1/databases/:id — scope `databases:read`."""
@@ -93,7 +100,8 @@ class DatabasesResource:
         )
 
     def create(self, body: CreateDatabaseBody) -> APIDatabase:
-        """POST /v1/databases — scope `databases:write`."""
+        """POST /v1/databases — scope `databases:write`.
+        Errors: `INVALID_DATABASE_VERSION`, `SNAPSHOT_VERSION_NEWER`."""
         return self._c.request_json("POST", "/v1/databases", json_body=body)
 
     def update(self, db_id: str, body: UpdateDatabaseBody, *, workspace_id: str | None = None) -> APIDatabase:

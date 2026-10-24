@@ -32,6 +32,19 @@ class VertraAPIError(Exception):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(status={self.status!r}, code={self.code!r})"
 
+    @property
+    def issues(self) -> list[dict[str, Any]]:
+        """Findings of a `DOCKERFILE_REFUSED` error: the objects in `details.issues`, as the API sent them
+        (`{code, line}`). Tolerant on purpose: any other error, or a `details` of another shape, gives `[]`
+        and never raises; entries that are not objects are skipped."""
+        details = self.details
+        if not isinstance(details, dict):
+            return []
+        raw = details.get("issues")
+        if not isinstance(raw, list):
+            return []
+        return [item for item in raw if isinstance(item, dict)]
+
 
 class AuthenticationError(VertraAPIError):
     """401 — invalid key or user not found (`API_KEY_INVALID`, `USER_NOT_FOUND`)."""

@@ -56,11 +56,25 @@ class SnapshotsResource:
             query={"scope": scope},
         )
 
-    def restore(self, resource_id: str, snapshot_id: str, scope: SnapshotScope) -> APISnapshotRestoreResponse:
-        """POST /v1/users/:id/snapshots/:snapshot_id/restore — scope `snapshots:write`."""
+    def restore(
+        self,
+        resource_id: str,
+        snapshot_id: str,
+        scope: SnapshotScope,
+        *,
+        restore_image_version: bool | None = None,
+    ) -> APISnapshotRestoreResponse:
+        """POST /v1/users/:id/snapshots/:snapshot_id/restore — scope `snapshots:write`.
+        For database snapshots it can fail with `SNAPSHOT_VERSION_NEWER`.
+        `restore_image_version` applies to an app on a custom image: `True` also goes back to the image
+        version the app ran when the snapshot was taken, if it still exists (the response then carries
+        `warning` when it does not). Omitted, the API restores only the data."""
+        body: dict[str, bool] = (
+            {} if restore_image_version is None else {"restore_image_version": restore_image_version}
+        )
         return self._c.request_json(
             "POST",
             f"/v1/users/{encode_path_param(resource_id)}/snapshots/{encode_path_param(snapshot_id)}/restore",
-            json_body={},
+            json_body=body,
             query={"scope": scope},
         )

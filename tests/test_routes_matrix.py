@@ -62,9 +62,11 @@ def _drive_all_calls(client: VertraClient, transport: FakeTransport) -> None:
     apps.files.move(ID, {"path": "/a.py", "to": "/b.py"})
     apps.files.delete(ID, path="/a.py")
     apps.files.upload(ID, file=b"data", filename="a.py")
+    apps.create_from_image({"image_id": ID, "name": "x", "memory": 512, "web": False})
 
     databases = client.databases
     databases.status_all()
+    databases.versions()
     databases.get(ID)
     databases.status(ID)
     databases.metrics(ID)
@@ -137,6 +139,23 @@ def _drive_all_calls(client: VertraClient, transport: FakeTransport) -> None:
     billing.details()
     billing.update_details({"name": "x", "address": {"line1": "x", "city": "x", "country": "US"}})
     billing.redeem("CODE123")
+
+    images = client.images
+    images.list()
+    images.create({"name": "img"}, file=b"zip-bytes")
+    images.create({"name": "img", "github_repository": "acme/site", "github_branch": "main"})
+    images.get(ID)
+    images.update(ID, {"name": "img2"})
+    images.rebuild(ID, file=b"zip-bytes")
+    images.delete(ID, confirm_name="img")
+    images.versions(ID)
+    transport.queue_stream([b"event: log\n", b"data: step\n", b"\n"])
+    build_log = images.logs(ID, version_id=ID2)
+    build_log.close()
+    images.context(ID)
+    images.link_github(ID, {"repository": "acme/site", "branch": "main"})
+    images.unlink_github(ID)
+    images.check({"dockerfile": "FROM alpine", "files": ["Dockerfile"]})
 
 
 def test_every_frozen_route_is_generated_exactly_once() -> None:

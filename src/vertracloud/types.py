@@ -145,6 +145,9 @@ class SetSubdomainBody(TypedDict):
 
 class PublishAppBody(TypedDict, total=False):
     subdomain: str
+    # Only for an app on a custom image: the port the image listens on (1-65535).
+    # Required when the app was created without web; ignored for other apps.
+    port: int
 
 
 class PurgeCacheBody(TypedDict, total=False):
@@ -170,13 +173,21 @@ class MoveFileBody(TypedDict, total=False):
     workspace_id: str
 
 
-class CreateWebhookBody(TypedDict):
-    """Body for `apps.deploys.webhook.create` — all 4 fields are required."""
-
+class _CreateWebhookBodyRequired(TypedDict):
     owner: str
     repo_name: str
     repo_id: str
     account_id: str
+
+
+class CreateWebhookBody(_CreateWebhookBodyRequired, total=False):
+    """Body for `apps.deploys.webhook.create` — the first 4 fields are required.
+
+    `branch` is the only branch the auto-deploy reacts to. Without it, a push on `main` or `master`
+    deploys, as it always did. Linking again with another `branch` changes it; linking again
+    without one goes back to `main` or `master`."""
+
+    branch: str
 
 
 class _CreateDatabaseBodyRequired(TypedDict):
@@ -192,6 +203,10 @@ class CreateDatabaseBody(_CreateDatabaseBodyRequired, total=False):
     type: int
     workspace_id: str
     snapshot_id: str
+    version: str
+    """Engine major line (see `databases.versions()`). Omitted, the recommended one is used; with
+    `snapshot_id`, omit it to keep the snapshot's line (an older one fails with `SNAPSHOT_VERSION_NEWER`,
+    an unknown one with `INVALID_DATABASE_VERSION`)."""
 
 
 class UpdateDatabaseBody(TypedDict, total=False):
@@ -393,11 +408,20 @@ class _APIApplicationRequired(TypedDict):
     shield_cooldown: APIApplicationShieldCooldown | None
     deploy: APIApplicationDeploySettings
     last_build_error: ApplicationBuildError | None
+    # Custom Docker image the app runs from; `None` for a regular app.
+    custom_image: APIApplicationCustomImage | None
 
 
 class APIApplication(_APIApplicationRequired, total=False):
     description: str
     github: APIApplicationGithub | None
+
+
+class APIApplicationCreated(APIApplication, total=False):
+    """Response of `apps.create`. `warning` is set when the app was created from the snapshot of an app
+    on a custom image and the recorded image version no longer exists: the app uses the current version."""
+
+    warning: SnapshotImageWarning
 
 
 class APIApplicationNetwork(TypedDict):
@@ -439,6 +463,10 @@ class _APIAppFileUploadResponseRequired(TypedDict):
 
 class APIAppFileUploadResponse(_APIAppFileUploadResponseRequired, total=False):
     removed_directories: list[str]
+    # Only for a commit to an app on a custom image: the image build the commit started. `None` otherwise.
+    image_build: APIApplicationImageBuild | None
+    # Readable summary for the CLI, e.g. that the image is rebuilding.
+    message: str
 
 
 class APIApplicationMetric(TypedDict):
@@ -530,6 +558,16 @@ class APIWebhookUrl(TypedDict):
     url: str
 
 
+class APIApplicationWebhook(TypedDict):
+    """Auto-deploy webhook of an application and the repository it is linked to.
+    `branch` is `None` for a link created without one (reacts to `main` or `master`)."""
+
+    webhook_url: str
+    repo_owner: str
+    repo_name: str
+    branch: str | None
+
+
 class APISubdomainResponse(TypedDict):
     subdomain: str
 
@@ -604,6 +642,18 @@ class APIDatabase(TypedDict):
     updated_at: str
     last_snapshot: str | None
     offline_since: str | None
+    version: str
+    """Engine major line, e.g. `"18"` or `"8.0"`; the patch is never exposed. Not limited to the
+    catalog: older databases may report a line that is no longer offered for new ones."""
+
+
+class APIDatabaseVersionCatalog(TypedDict):
+    recommended: str
+    available: list[str]
+
+
+APIDatabaseVersions = dict[str, APIDatabaseVersionCatalog]
+"""Catalog keyed by the engine `type` as a string (`"1"`, `"2"`, ...)."""
 
 
 class APIDatabaseNetwork(TypedDict):
@@ -666,8 +716,13 @@ class APIGroupedResourceSnapshots(TypedDict):
     snapshots: list[APIResourceSnapshot]
 
 
-class APISnapshotRestoreResponse(TypedDict):
+class _APISnapshotRestoreResponseRequired(TypedDict):
     message: str
+
+
+class APISnapshotRestoreResponse(_APISnapshotRestoreResponseRequired, total=False):
+    # Set when `restore_image_version` was asked but the recorded image version is gone: only data was restored.
+    warning: SnapshotImageWarning
 
 
 class APIUser(TypedDict):
@@ -1133,3 +1188,163 @@ class _APIBlobCustomDomainRequired(TypedDict):
 class APIBlobCustomDomain(_APIBlobCustomDomainRequired, total=False):
     # Only while the domain is not active: the TXT record that proves ownership.
     verification: APIBlobCustomDomainVerification | None
+
+
+# -- Custom Docker images: `images.*` and `apps.create_from_image` ---------------------------
+
+CustomImageStatus = Literal["building", "success", "failed"]
+CustomImageBuildSource = Literal["upload", "commit", "github"]
+CustomImageOwner = Literal["account", "system"]
+DockerfileIssueCode = Literal[
+    "missing_dockerfile",
+    "syntax_frontend",
+    "run_security_insecure",
+    "run_network_host",
+    "mount_ssh",
+    "mount_secret",
+    "workdir_app",
+    "env_file_in_context",
+    "copy_env_file",
+    "volume_outside_app",
+    "volume_refused",
+]
+
+
+class DockerfileIssue(TypedDict):
+    """Refusals block the build; warnings do not. `line` is `None` when no line applies."""
+
+    code: DockerfileIssueCode
+    line: int | None
+
+
+class APIDockerfileCheck(TypedDict):
+    refusals: list[DockerfileIssue]
+    warnings: list[DockerfileIssue]
+    suggested_port: int
+
+
+class APICustomImageApp(TypedDict):
+    id: str
+    name: str
+    version_id: str | None
+    outdated: bool
+
+
+class APIApplicationCustomImage(APICustomImageApp):
+    """`APIApplication.custom_image`: the image the app runs from and the port it listens on."""
+
+    image_id: str
+    port: int | None
+
+
+class APICustomImageGithub(TypedDict):
+    repository: str
+    branch: str
+
+
+class APICustomImage(TypedDict):
+    id: str
+    name: str
+    # Free-text description, up to 128 characters; None when the image has none.
+    description: str | None
+    owner: CustomImageOwner
+    status: CustomImageStatus
+    error: str | None
+    digest: str | None
+    uncompressed_bytes: int | None
+    layer_count: int | None
+    # Port suggested for a new app on this image (first EXPOSE, or 80); None for images created before the field.
+    suggested_port: int | None
+    apps: list[APICustomImageApp]
+    github: APICustomImageGithub | None
+    current_version_id: str | None
+    created_at: str
+    updated_at: str
+
+
+class APICustomImageVersion(TypedDict):
+    id: str
+    digest: str
+    source: CustomImageBuildSource
+    message: str | None
+    created_at: str
+    in_use: bool
+
+
+class APICustomImageContext(TypedDict):
+    url: str
+
+
+class APICustomImageDeleteResult(TypedDict):
+    deleted_apps: list[str]
+
+
+class _CreateCustomImageRequired(TypedDict):
+    name: str
+
+
+class CreateCustomImageBody(_CreateCustomImageRequired, total=False):
+    """`POST /v1/images` fields. Exactly one source: a `file` passed to `images.create`, or
+    `github_repository` (`owner/name`). `github_branch` is optional; without it the repository's default
+    branch is used. A repository in your GitHub App installations is linked (each push to the branch
+    rebuilds the image); a public repository outside them is built once, with no link.
+    `description` is optional free text, up to 128 characters (an empty value means none)."""
+
+    description: str
+    github_repository: str
+    github_branch: str
+    workspace_id: str
+
+
+class _CustomImageGithubRequired(TypedDict):
+    repository: str
+
+
+class UpdateCustomImageBody(TypedDict, total=False):
+    """`PATCH /v1/images/:image_id` fields; send only what changes (at least one). `name` is 1 to 50
+    characters, unique among your images. `description` is up to 128 characters; `None` or an empty
+    string removes it."""
+
+    name: str
+    description: str | None
+
+
+class CustomImageGithubBody(_CustomImageGithubRequired, total=False):
+    """`PUT /v1/images/:image_id/github` fields. `branch` is optional: without it the repository's
+    default branch is used. The repository must be in one of your GitHub App installations."""
+
+    branch: str
+
+
+class CheckDockerfileBody(TypedDict):
+    dockerfile: str
+    files: list[str]
+
+
+class APIApplicationImageBuild(TypedDict):
+    """The image build started by a commit to an app on a custom image (`apps.files.upload`)."""
+
+    image_id: str
+    build_id: str
+
+
+# Warning of a snapshot restore or of a create from a snapshot: the image version the snapshot recorded was
+# removed by retention, so the app stays on the image's current version.
+SnapshotImageWarning = Literal["IMAGE_VERSION_NOT_FOUND"]
+
+
+class _CreateAppFromImageRequired(TypedDict):
+    image_id: str
+    name: str
+    memory: int
+    web: bool
+
+
+class CreateAppFromImageBody(_CreateAppFromImageRequired, total=False):
+    """`POST /v1/apps/image`. `subdomain` and `port` apply only with `web: True`."""
+
+    description: str
+    subdomain: str
+    port: int
+    envs: list[EnvEntry]
+    workspace_id: str

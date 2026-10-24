@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from vertracloud import VertraClient
+from vertracloud.types import APIApplicationWebhook, CreateWebhookBody
 
 from .fake_transport import FakeTransport
 
@@ -104,6 +105,38 @@ def test_webhook_create_sends_exact_required_body() -> None:
     assert _body(call) == body
 
 
+def test_webhook_create_sends_optional_branch() -> None:
+    client, transport = _client()
+    body: CreateWebhookBody = {
+        "owner": "acme",
+        "repo_name": "site",
+        "repo_id": "123",
+        "account_id": "456",
+        "branch": "release",
+    }
+    client.apps.deploys.webhook.create(ID, body)
+    call = _call(transport)
+    assert call.method == "POST"
+    assert call.path == f"/v1/apps/{ID}/deploys/webhook"
+    assert _body(call) == {**body, "branch": "release"}
+
+
+def test_webhook_create_omits_branch_when_not_given() -> None:
+    client, transport = _client()
+    body: CreateWebhookBody = {"owner": "acme", "repo_name": "site", "repo_id": "123", "account_id": "456"}
+    client.apps.deploys.webhook.create(ID, body)
+    assert "branch" not in _body(_call(transport))
+
+
+def test_webhook_get_reads_branch_or_null() -> None:
+    client, transport = _client()
+    transport.queue_json(
+        {"response": {"webhook_url": "https://x/hook", "repo_owner": "acme", "repo_name": "site", "branch": None}}
+    )
+    hook: APIApplicationWebhook = client.apps.deploys.webhook.get(ID)
+    assert hook["branch"] is None
+
+
 def test_webhook_create_requires_body_argument() -> None:
     client, _ = _client()
     with pytest.raises(TypeError):
@@ -124,6 +157,21 @@ def test_databases_create_sends_required_ram_and_type() -> None:
     assert sent == body
     assert "engine" not in sent
     assert "plan" not in sent
+
+
+def test_databases_create_sends_optional_version_as_is() -> None:
+    client, transport = _client()
+    body = {"name": "meu-db", "ram": 512, "type": 1, "version": "17"}
+    client.databases.create(body)
+    assert _body(_call(transport)) == body
+
+
+def test_databases_versions_hits_catalog_route() -> None:
+    client, transport = _client()
+    client.databases.versions()
+    call = _call(transport)
+    assert call.method == "GET"
+    assert call.path == "/v1/databases/versions"
 
 
 def test_databases_update_accepts_name_description_ram_only() -> None:
@@ -226,6 +274,72 @@ def test_snapshots_restore_sends_empty_body() -> None:
     client.snapshots.restore(ID, ID2, "databases")
     call = _call(transport)
     assert _body(call) == {}
+
+
+# -- snapshots.restore: restore_image_version and the image warning ----------------------
+
+
+def test_snapshots_restore_sends_restore_image_version_only_when_given() -> None:
+    client, transport = _client()
+    client.snapshots.restore(ID, ID2, "applications", restore_image_version=True)
+    client.snapshots.restore(ID, ID2, "applications", restore_image_version=False)
+    assert _body(transport.calls[0]) == {"restore_image_version": True}
+    assert _body(transport.calls[1]) == {"restore_image_version": False}
+
+
+def test_snapshots_restore_returns_the_image_warning() -> None:
+    client, transport = _client()
+    transport.queue_json({"response": {"message": "restored", "warning": "IMAGE_VERSION_NOT_FOUND"}})
+    result = client.snapshots.restore(ID, ID2, "applications", restore_image_version=True)
+    assert result["warning"] == "IMAGE_VERSION_NOT_FOUND"
+
+
+# -- apps.create from a snapshot: warning when the recorded image version is gone ----------
+
+
+def test_apps_create_from_snapshot_returns_the_image_warning() -> None:
+    client, transport = _client()
+    transport.queue_json({"response": {"id": "app-1", "custom_image": None, "warning": "IMAGE_VERSION_NOT_FOUND"}})
+    result = client.apps.create({"name": "x", "snapshot_id": ID2})
+    assert result["warning"] == "IMAGE_VERSION_NOT_FOUND"
+    assert b'name="snapshot_id"' in (transport.calls[0].body or b"")
+
+
+# -- apps.files.upload: a commit to an image-backed app reports the image build -------------
+
+
+def test_upload_commit_on_image_app_returns_image_build_and_message() -> None:
+    client, transport = _client()
+    transport.queue_json(
+        {
+            "response": {
+                "app_id": ID,
+                "updated_at": "2026-10-23T12:00:00.000Z",
+                "removed_directories": [],
+                "image_build": {"image_id": ID2, "build_id": "build-1"},
+                "message": "image rebuilding; the app restarts when the build succeeds",
+            }
+        }
+    )
+    result = client.apps.files.upload(ID, file=b"print(1)", filename="a.py", message="fix")
+    assert result["image_build"] == {"image_id": ID2, "build_id": "build-1"}
+    assert result["message"].startswith("image rebuilding")
+
+
+def test_upload_commit_on_regular_app_has_null_image_build() -> None:
+    client, transport = _client()
+    transport.queue_json(
+        {
+            "response": {
+                "app_id": ID,
+                "updated_at": "2026-10-23T12:00:00.000Z",
+                "removed_directories": [],
+                "image_build": None,
+            }
+        }
+    )
+    result = client.apps.files.upload(ID, file=b"x", filename="a.py")
+    assert result["image_build"] is None
 
 
 # -- workspaces.members.update: role_id/expires_at --------------------------------------

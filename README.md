@@ -57,7 +57,7 @@ client = VertraClient(
 
 ### Per-call options
 
-Methods on apps and databases take a keyword-only `workspace_id`; downloads, uploads and streams also take `timeout`:
+Methods on apps, databases and images take a keyword-only `workspace_id`; downloads, uploads and streams also take `timeout`:
 
 ```python
 # Act on a resource that belongs to a workspace
@@ -195,6 +195,66 @@ client.blob.delete_many(prefix="tmp/")
 
 `data` can be `bytes`, a file path, or a seekable binary file. Up to 5 MB it is one request; larger files go straight to storage in parts, with a retry per part. If the process dies halfway, `client.blob.resume(upload_id, data)` sends only the missing parts.
 
+### Custom Docker images
+
+An image is a build context (a ZIP of up to 100 MB, or a GitHub repository) with a `Dockerfile` at its root. Create and rebuild reply right away with `status: "building"`; the build then ends as `success` or `failed`, and `error` says why. Whether your plan can create images is decided by the API (`PLAN_DOES_NOT_SUPPORT_CUSTOM_IMAGES`).
+
+```python
+# From a ZIP: the file is passed as bytes, like apps.create
+with open("projeto.zip", "rb") as f:
+    image = client.images.create({"name": "meu-projeto"}, file=f.read())
+
+# Or from GitHub: `github_branch` is optional (default: the repository's default branch). A repository in your
+# GitHub App installations is linked and each push to the branch rebuilds the image; a public repository outside
+# them is built once, with no link.
+site = client.images.create({"name": "site", "github_repository": "acme/site", "github_branch": "main"})
+
+# Check the Dockerfile before building; `refusals` block the build, `warnings` do not
+report = client.images.check({"dockerfile": dockerfile_text, "files": ["Dockerfile", "app.py"]})
+
+# Follow the build as lines of text; the stream repeats the history, then goes live
+for line in client.images.logs(image["id"]):
+    print(line)
+
+image = client.images.get(image["id"])  # then status is "success" or "failed"
+
+app = client.apps.create_from_image(
+    {"image_id": image["id"], "name": "meu-app", "memory": 512, "web": True, "subdomain": "random"}
+)
+```
+
+Images can belong to a workspace, like apps. `list` and every method that acts on an existing image take a keyword-only `workspace_id`; `create` and `apps.create_from_image` take it in the body (`{"name": "site", "workspace_id": workspace_id, ...}`). `check` only reads the `Dockerfile` you send, so it has no workspace.
+
+```python
+images = client.images.list(workspace_id=workspace_id)
+client.images.rebuild(image_id, file=zip_bytes, workspace_id=workspace_id)
+```
+
+`create` takes an optional `description` (up to 128 characters). `update` renames the image and/or changes its description without building anything; the apps keep running. Send only what changes, and `None` removes the description:
+
+```python
+client.images.update(image["id"], {"name": "meu-projeto-base", "description": "Base Node 22"})
+client.images.update(image["id"], {"description": None})
+```
+
+`images.logs` returns an iterator with `close()`, like `apps.realtime`. `rebuild(image_id, file=...)` replaces the whole build context; it never restarts the apps that run the image. `link_github` and `unlink_github` change the GitHub link, and `versions` lists the successful builds, newest first.
+
+`delete` removes the image and **every app created from it**. The name must be typed back as `confirm_name`:
+
+```python
+client.images.delete(image["id"], confirm_name="meu-projeto")  # {"deleted_apps": [...]}
+```
+
+### Database versions
+
+```python
+catalog = client.databases.versions()  # keyed by engine type, as a string
+db = client.databases.create({"name": "meu-db", "type": 1, "ram": 512, "version": catalog["1"]["recommended"]})
+print(db["version"])  # major line, e.g. "18"
+```
+
+Omit `version` to get the recommended one; with `snapshot_id`, omit it to keep the snapshot's line (an older one fails with `SNAPSHOT_VERSION_NEWER`, an unknown one with `INVALID_DATABASE_VERSION`). A database's version cannot be changed after creation; security updates are applied when it is stopped and started.
+
 ### Errors
 
 Every non-2xx response raises a `VertraAPIError` carrying the HTTP `status`, the API `code` (e.g. `APP_NOT_FOUND`) and `details`; `str(err)` includes the message. The API key is never part of the error, even when it is printed:
@@ -226,8 +286,9 @@ client = VertraClient(api_key="test", transport=my_fake_transport)
 
 | Domain | Resource | Routes |
 |---|---|---|
-| Apps | `client.apps` (+ `.deploys`, `.releases`, `.domains`, `.network`, `.envs`, `.files`) | 42 |
-| Databases | `client.databases` (+ `.credentials`) | 13 |
+| Apps | `client.apps` (+ `.deploys`, `.releases`, `.domains`, `.network`, `.envs`, `.files`) | 43 |
+| Databases | `client.databases` (+ `.credentials`) | 14 |
+| Custom images | `client.images` | 12 |
 | Snapshots | `client.snapshots` | 5 |
 | Account | `client.account` (+ `.sessions`, `.folders`, `.favorites`) | 10 |
 | Workspaces | `client.workspaces` (+ `.members`, `.roles`, `.invites`, `.action_requests`, `.apps`, `.databases`, `.folders`, `.favorites`) | 30 |

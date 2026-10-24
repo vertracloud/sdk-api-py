@@ -1,4 +1,4 @@
-"""`apps` domain — 42 routes (scopes `apps:read/write/delete/envs/files`).
+"""`apps` domain — 43 routes (scopes `apps:read/write/delete/envs/files`).
 
 `workspace_id` is accepted as an optional query parameter on almost every method.
 """
@@ -15,6 +15,7 @@ from ..types import (
     AddDomainBody,
     APIAppFileUploadResponse,
     APIApplication,
+    APIApplicationCreated,
     APIApplicationDeployment,
     APIApplicationDomain,
     APIApplicationDomainConnect,
@@ -29,11 +30,13 @@ from ..types import (
     APIApplicationRollbackPreview,
     APIApplicationStatus,
     APIApplicationStatusShort,
+    APIApplicationWebhook,
     APIApplicationWebPublish,
     APIRuntimesResponse,
     APISubdomainResponse,
     APIWebhookUrl,
     CreateAppBody,
+    CreateAppFromImageBody,
     CreateWebhookBody,
     EnvironmentSetBody,
     JsonValue,
@@ -61,7 +64,7 @@ class AppDeploysWebhookResource:
     def __init__(self, client: VertraClient) -> None:
         self._c = client
 
-    def get(self, app_id: str, *, workspace_id: str | None = None) -> APIWebhookUrl:
+    def get(self, app_id: str, *, workspace_id: str | None = None) -> APIApplicationWebhook:
         """GET /v1/apps/:id/deploys/webhook — scope `apps:read`.
         Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/deploys/webhookurl
         """
@@ -255,7 +258,9 @@ class AppNetworkResource:
         self, app_id: str, body: PublishAppBody | None = None, *, workspace_id: str | None = None
     ) -> APIApplicationWebPublish:
         """POST /v1/apps/:id/network/publish — scope `apps:write`. The Pro plan gets a random
-        subdomain, Scale picks its own; an empty `{}` body is valid."""
+        subdomain, Scale picks its own; an empty `{}` body is valid. `port` (only for an app on a
+        custom image) is the port the image listens on; it is required when the app has no web
+        port yet."""
         return self._c.request_json(
             "POST",
             f"/v1/apps/{encode_path_param(app_id)}/network/publish",
@@ -467,9 +472,10 @@ class AppsResource:
         file: bytes | None = None,
         filename: str = "app.zip",
         timeout: float | None = None,
-    ) -> APIApplication:
+    ) -> APIApplicationCreated:
         """POST /v1/apps — scope `apps:write`. Multipart: field `file` (zip) OR `snapshot_id`
-        in `body`, other fields as text parts. Rate limit 15/min, plus the plan's
+        in `body`, other fields as text parts. A snapshot of an app on a custom image can come with
+        `warning` (`IMAGE_VERSION_NOT_FOUND`). Rate limit 15/min, plus the plan's
         deploys-per-hour cap. Replies 202 with `status: "building"`: the build continues in the
         background — use `wait_until_ready`, `logs` or `realtime` to follow it.
         Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/create
@@ -491,6 +497,15 @@ class AppsResource:
         return self._c.request_multipart(
             "POST", "/v1/apps", fields=fields, timeout=timeout if timeout is not None else LARGE_PAYLOAD_TIMEOUT
         )
+
+    def create_from_image(self, body: CreateAppFromImageBody) -> APIApplication:
+        """POST /v1/apps/image — scope `apps:write`. JSON. Creates an app that runs from a custom
+        image, which must be ready (`images.get(...)["status"] == "success"`). Replies 202 with
+        `status: "building"` and `custom_image` filled in; follow the build as with `create`.
+        `web: False` makes an app without traffic; `subdomain` and `port` need `web: True`.
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/create-from-image
+        """
+        return self._c.request_json("POST", "/v1/apps/image", json_body=body)
 
     def wait_until_ready(
         self,
