@@ -1,4 +1,4 @@
-"""`images` domain — custom Docker images (scopes `images:read/write`).
+"""`images` domain — custom Docker images (scopes `images:read`, `images:write` and `images:delete`).
 
 A custom image is a build context with a `Dockerfile`, built by the platform in isolation.
 `apps.create_from_image` (scope `apps:write`) runs an app from a ready image. Create and rebuild
@@ -158,7 +158,7 @@ class ImagesResource:
     def delete(
         self, image_id: str, *, confirm_name: str, workspace_id: str | None = None
     ) -> APICustomImageDeleteResult:
-        """DELETE /v1/images/:image_id — scope `images:write`, and also `apps:delete` when apps run the
+        """DELETE /v1/images/:image_id — scope `images:delete`, and also `apps:delete` when apps run the
         image. Body `{confirm_name}` must equal the image name (`IMAGE_NAME_MISMATCH` otherwise).
         Deletes the versions, the context and every app created from the image; `deleted_apps` lists
         their ids. Refused with `IMAGE_BUILD_IN_PROGRESS` while a build runs.
