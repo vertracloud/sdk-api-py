@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/vertracloud/sdk-api-py/compare/v0.3.1...v0.3.2) (2026-10-25)
+
+
+### Features
+
+* add images resource and database engine versions ([2136b86](https://github.com/vertracloud/sdk-api-py/commit/2136b86739608096c9e4590589b3aca2f42d1777))
+
 ## [0.3.1](https://github.com/vertracloud/sdk-api-py/compare/v0.3.0...v0.3.1) (2026-10-22)
 
 
