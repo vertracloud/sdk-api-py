@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/vertracloud-api.svg)](https://pypi.org/project/vertracloud-api/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Official Python SDK for the [Vertra Cloud](https://vertracloud.app) public API: apps, databases, snapshots, account, workspaces and billing — one typed method per route.
+Official Python SDK for the [Vertra Cloud](https://vertracloud.app) public API: apps, databases, templates, stacks, snapshots, account, workspaces and billing — one typed method per route.
 
 - Python 3.10+, fully typed (`py.typed`), with `TypedDict` payloads.
 - Zero dependencies outside the standard library.
@@ -57,7 +57,7 @@ client = VertraClient(
 
 ### Per-call options
 
-Methods on apps, databases and images take a keyword-only `workspace_id`; downloads, uploads and streams also take `timeout`:
+Methods on apps, databases, images, templates and stacks take a keyword-only `workspace_id`; downloads, uploads and streams also take `timeout`:
 
 ```python
 # Act on a resource that belongs to a workspace
@@ -245,6 +245,52 @@ client.images.update(image["id"], {"description": None})
 client.images.delete(image["id"], confirm_name="meu-projeto")  # {"deleted_apps": [...]}
 ```
 
+### Templates
+
+A template describes what to create: one application, or a stack with applications, databases and a Blob folder. `deploy` returns a job right away; follow it with `deploys.events` (Server-Sent Events) or read `deploys.get`. A job that fails is undone as a whole.
+
+```python
+page = client.templates.list(category="bots", sort="popular")
+
+job = client.templates.deploy(
+    "n8n",
+    {"name": "my-n8n", "inputs": {"admin_email": "me@example.com"}},
+    idempotency_key="deploy-my-n8n-1",  # repeating the call returns the same job
+)
+
+events = client.templates.deploys.events(job["id"])
+for event in events:  # heartbeats are skipped; the loop ends when the API sends `end`
+    print(event["status"], event["current_step"])
+job = client.templates.deploys.get(job["id"])  # outputs are read here, never on the stream
+```
+
+`idempotency_key` is sent as the `Idempotency-Key` header and never goes in the body: the same key with the same request returns the same job, the same key with another request fails with `IDEMPOTENCY_KEY_CONFLICT`. Outputs marked `once` come back on the first read of a finished job and are empty afterwards.
+
+Private templates: `create` and `new_version` take the manifest and one ZIP per service that runs code (`sources={"web": zip_bytes}`); `from_app` and `from_stack` save what you already run (read `app_draft` / `stack_draft` first to review the variables). `share_links` creates, lists and revokes links; `share` previews, uses, copies or reports what a link gives. `updates` reads and runs the update of an app or stack that came from a template, and detaches it. `validate` checks a manifest without creating anything; the findings of a refused one are in `err.manifest_issues`.
+
+An application that came from an open template stops receiving versions when its code is changed. The calls that change code (`apps.files.write`, `move`, `delete`, `upload` and `apps.deploys.webhook.create`) fail with `TEMPLATE_DETACH_CONFIRMATION_REQUIRED` until you pass `confirm_detach=True` (in the body of `move` and `webhook.create`); `err.detach_action` tells which action asked for it.
+
+### Stacks
+
+A stack groups applications, databases and Blob folders, and keeps the connection variables of each application up to date. Changes that alter variables or certificates return `restart_required` and `apps_to_restart`: an application reads them only when it starts, so the restart is yours to ask for. The same notice comes back from `databases.credentials.certificate.reset` and `password.reset`.
+
+```python
+change = client.stacks.create(
+    {
+        "name": "shop",
+        "members": [
+            {"resource_type": "application", "resource_id": app_id},
+            {"resource_type": "database", "resource_id": db_id},
+        ],
+        "bindings": [{"app_id": app_id, "database_id": db_id}],
+    }
+)
+if change["restart_required"]:
+    print("restart:", change["apps_to_restart"])
+```
+
+`delete` needs `confirm_name` equal to the stack name; mode `dissolve` removes only the stack, `delete_all` deletes the members too. `members`, `bindings` and `snapshots` group the routes of members, connections and whole-stack snapshots; `connection` returns code to connect an app to what it is linked to. Move a stack or a template to a workspace with `workspaces.stacks` and `workspaces.templates`. The error codes of both areas are constants in `vertracloud.errcodes`.
+
 ### Database versions
 
 ```python
@@ -272,6 +318,8 @@ except VertraAPIError as err:
     print(err.status, err.code, err)
 ```
 
+A few errors carry a structured `details`; tolerant properties read them and give an empty value for any other error: `err.issues` (`DOCKERFILE_REFUSED`), `err.manifest_issues` (`TEMPLATE_MANIFEST_INVALID`), `err.secret_files` (`TEMPLATE_SECRET_IN_SOURCE`), `err.update_blocked` (`TEMPLATE_UPDATE_BLOCKED`) and `err.detach_action` (`TEMPLATE_DETACH_CONFIRMATION_REQUIRED`).
+
 Other subclasses: `AuthenticationError` (401), `ScopeDeniedError` (403 — including a missing key scope) and `ValidationError` (400/422). The error codes are listed in the [API reference](https://docs.vertracloud.app/api-reference/introduction).
 
 ### Testing your code
@@ -289,9 +337,11 @@ client = VertraClient(api_key="test", transport=my_fake_transport)
 | Apps | `client.apps` (+ `.deploys`, `.releases`, `.domains`, `.network`, `.envs`, `.files`) | 43 |
 | Databases | `client.databases` (+ `.credentials`) | 14 |
 | Custom images | `client.images` | 12 |
+| Templates | `client.templates` (+ `.deploys`, `.share_links`, `.share`, `.updates`) | 32 |
+| Stacks | `client.stacks` (+ `.members`, `.bindings`, `.snapshots`) | 20 |
 | Snapshots | `client.snapshots` | 5 |
 | Account | `client.account` (+ `.sessions`, `.folders`, `.favorites`) | 10 |
-| Workspaces | `client.workspaces` (+ `.members`, `.roles`, `.invites`, `.action_requests`, `.apps`, `.databases`, `.folders`, `.favorites`) | 30 |
+| Workspaces | `client.workspaces` (+ `.members`, `.roles`, `.invites`, `.action_requests`, `.apps`, `.databases`, `.templates`, `.stacks`, `.folders`, `.favorites`) | 34 |
 | Billing | `client.billing` (+ `.orders`) | 7 |
 | Blob Storage | `client.blob` (+ `.shares`, `.rules`, `.domains`) | own host |
 

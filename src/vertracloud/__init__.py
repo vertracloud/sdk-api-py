@@ -1,5 +1,6 @@
 """Typed Python client for the Vertra Cloud public API (`import vertracloud`)."""
 
+from . import errcodes
 from .client import VertraClient, __version__
 from .errors import (
     AppBuildFailedError,
@@ -12,6 +13,7 @@ from .errors import (
     VertraAPIError,
     WaitTimeoutError,
 )
+from .resources.templates import TemplateDeployEventStream
 from .sse import SseEvent, SseStream
 from .transport import Response, Transport, UrllibTransport
 
@@ -29,6 +31,8 @@ __all__ = [
     "RateLimitError",
     "SseEvent",
     "SseStream",
+    "TemplateDeployEventStream",
+    "errcodes",
     "Transport",
     "UrllibTransport",
     "Response",

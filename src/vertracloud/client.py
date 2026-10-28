@@ -138,11 +138,15 @@ class VertraClient:
         from .resources.databases import DatabasesResource
         from .resources.images import ImagesResource
         from .resources.snapshots import SnapshotsResource
+        from .resources.stacks import StacksResource
+        from .resources.templates import TemplatesResource
         from .resources.workspaces import WorkspacesResource
 
         self.apps = AppsResource(self)
         self.databases = DatabasesResource(self)
         self.images = ImagesResource(self)
+        self.templates = TemplatesResource(self)
+        self.stacks = StacksResource(self)
         self.snapshots = SnapshotsResource(self)
         self.account = AccountResource(self)
         self.workspaces = WorkspacesResource(self)

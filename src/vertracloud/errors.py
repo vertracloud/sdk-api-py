@@ -45,6 +45,41 @@ class VertraAPIError(Exception):
             return []
         return [item for item in raw if isinstance(item, dict)]
 
+    def _details_for(self, code: str) -> dict[str, Any] | None:
+        if self.code != code or not isinstance(self.details, dict):
+            return None
+        return self.details
+
+    @property
+    def manifest_issues(self) -> list[dict[str, Any]]:
+        """Findings of a `TEMPLATE_MANIFEST_INVALID` error: the objects in `details.issues` (`{path, code, message}`).
+        Tolerant like `issues`: any other error gives `[]`."""
+        details = self._details_for("TEMPLATE_MANIFEST_INVALID")
+        raw = details.get("issues") if details else None
+        return [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
+
+    @property
+    def secret_files(self) -> list[str]:
+        """Paths of a `TEMPLATE_SECRET_IN_SOURCE` error: the files of the code sent to become a template that hold
+        a secret. Any other error gives `[]`."""
+        details = self._details_for("TEMPLATE_SECRET_IN_SOURCE")
+        raw = details.get("files") if details else None
+        return [item for item in raw if isinstance(item, str)] if isinstance(raw, list) else []
+
+    @property
+    def update_blocked(self) -> dict[str, Any] | None:
+        """Reason of a `TEMPLATE_UPDATE_BLOCKED` error (`{reason, details?}`); `None` for any other error."""
+        return self._details_for("TEMPLATE_UPDATE_BLOCKED")
+
+    @property
+    def detach_action(self) -> str | None:
+        """Action of a `TEMPLATE_DETACH_CONFIRMATION_REQUIRED` error (`files.write`, `deploy.code`,
+        `deploy.github` or `commit`): repeat the call with `confirm_detach=True` to detach the app from its template.
+        `None` for any other error."""
+        details = self._details_for("TEMPLATE_DETACH_CONFIRMATION_REQUIRED")
+        action = details.get("action") if details else None
+        return action if isinstance(action, str) else None
+
 
 class AuthenticationError(VertraAPIError):
     """401 — invalid key or user not found (`API_KEY_INVALID`, `USER_NOT_FOUND`)."""

@@ -157,6 +157,78 @@ def _drive_all_calls(client: VertraClient, transport: FakeTransport) -> None:
     images.unlink_github(ID)
     images.check({"dockerfile": "FROM alpine", "files": ["Dockerfile"]})
 
+    templates = client.templates
+    templates.list()
+    templates.get("n8n")
+    templates.categories()
+    templates.versions("n8n")
+    templates.validate({"id": "x"})
+    templates.deploy("n8n", {"name": "my-n8n"})
+    templates.create({"manifest": {"id": "x"}}, sources={"web": b"zip"})
+    templates.new_version(ID, {"manifest": {"id": "x"}})
+    templates.from_app(
+        ID,
+        {
+            "id": "x",
+            "name": {"pt-br": "x"},
+            "description": {"pt-br": "x"},
+            "category": "other",
+            "member": {"resource_id": ID2, "service_id": "web"},
+        },
+    )
+    templates.from_stack(
+        ID, {"id": "x", "name": {"pt-br": "x"}, "description": {"pt-br": "x"}, "category": "other", "members": []}
+    )
+    templates.app_draft(ID)
+    templates.stack_draft(ID)
+    templates.update(ID, {"tags": ["a"]})
+    templates.delete(ID)
+    templates.link_github(ID, {"repository": "acme/site"})
+    templates.unlink_github(ID)
+    templates.report_app(ID, {"reason": "other"})
+    templates.deploys.get(ID)
+    transport.queue_stream([b"event: end\n", b"data: {}\n", b"\n"])
+    list(templates.deploys.events(ID))
+    templates.share_links.create(ID, {"mode": "use"})
+    templates.share_links.list(ID)
+    templates.share_links.revoke(ID, ID2)
+    templates.share.preview("tok")
+    templates.share.deploy("tok", {"name": "x"})
+    templates.share.copy("tok")
+    templates.share.report("tok", {"reason": "other"})
+    templates.updates.app_info(ID)
+    templates.updates.app_update(ID)
+    templates.updates.app_detach(ID)
+    templates.updates.stack_info(ID)
+    templates.updates.stack_update(ID)
+    templates.updates.stack_detach(ID)
+
+    stacks = client.stacks
+    stacks.list()
+    stacks.get(ID)
+    stacks.create({"name": "s"})
+    stacks.transform({"folder_id": ID, "inject_variables": True})
+    stacks.update(ID, {"name": "s2"})
+    stacks.delete(ID, {"mode": "dissolve", "confirm_name": "s"})
+    stacks.connection(ID, app_id=ID2)
+    stacks.set_network_mode(ID, "public")
+    stacks.add_database(ID, {"type": 1, "name": "db", "ram": 512})
+    stacks.add_database_to_app(ID, {"type": 1, "name": "db", "ram": 512})
+    stacks.add_blob(ID)
+    stacks.members.add(ID, {"resource_type": "application", "resource_id": ID2})
+    stacks.members.remove(ID, "application", ID2)
+    stacks.bindings.list(ID)
+    stacks.bindings.create(ID, {"app_id": ID2})
+    stacks.bindings.update(ID, ID2, {"DATABASE_URL": "url"})
+    stacks.bindings.delete(ID, ID2)
+    stacks.snapshots.list(ID)
+    stacks.snapshots.create(ID)
+    stacks.snapshots.restore(ID, ID2)
+    workspaces.templates.add(ID, ID2)
+    workspaces.templates.remove(ID, ID2)
+    workspaces.stacks.add(ID, ID2)
+    workspaces.stacks.remove(ID, ID2)
+
 
 def test_every_frozen_route_is_generated_exactly_once() -> None:
     transport = FakeTransport()

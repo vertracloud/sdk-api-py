@@ -7,6 +7,10 @@ is `success` or `failed`.
 
 `workspace_id` is a keyword-only query parameter on the routes that act on an existing image and
 on `list`. Without it the call acts on the caller's own images, as the apps routes do.
+
+An image that came from a template (`kind == "template_copy"`, or a platform image) cannot be renamed, rebuilt,
+linked to GitHub or committed to: those calls fail with `IMAGE_TEMPLATE_ONLY`. Deleting an image that is the
+source of one of your private templates fails with `IMAGE_IN_USE`.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Local fixture with the 121 routes from the API key catalog, and the list of forbidden
+"""Local fixture with the 177 routes from the API key catalog, and the list of forbidden
 paths. `tests/test_routes_matrix.py` proves exact coverage and exclusion."""
 
 from __future__ import annotations
@@ -125,9 +125,66 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("PUT", "/v1/workspaces/:id/favorites/:resource_type/:resource_id"),
     ("PUT", "/v1/workspaces/:id/folders/:folder_id/resources/:resource_type/:resource_id"),
     ("PUT", "/v1/workspaces/:id/roles/:role_id"),
+    # Templates, stacks and the template/stack links of apps and workspaces (release 26.4.11).
+    ("POST", "/v1/apps/:id/stack/databases"),
+    ("POST", "/v1/apps/:id/template/detach"),
+    ("POST", "/v1/apps/:id/template/report"),
+    ("GET", "/v1/apps/:id/template/update"),
+    ("POST", "/v1/apps/:id/template/update"),
+    ("GET", "/v1/share/templates/:token"),
+    ("POST", "/v1/share/templates/:token/copy"),
+    ("POST", "/v1/share/templates/:token/deploy"),
+    ("POST", "/v1/share/templates/:token/report"),
+    ("GET", "/v1/stacks"),
+    ("POST", "/v1/stacks"),
+    ("DELETE", "/v1/stacks/:stack_id"),
+    ("GET", "/v1/stacks/:stack_id"),
+    ("PATCH", "/v1/stacks/:stack_id"),
+    ("GET", "/v1/stacks/:stack_id/bindings"),
+    ("POST", "/v1/stacks/:stack_id/bindings"),
+    ("DELETE", "/v1/stacks/:stack_id/bindings/:binding_id"),
+    ("PATCH", "/v1/stacks/:stack_id/bindings/:binding_id"),
+    ("POST", "/v1/stacks/:stack_id/blob"),
+    ("GET", "/v1/stacks/:stack_id/connection"),
+    ("POST", "/v1/stacks/:stack_id/databases"),
+    ("POST", "/v1/stacks/:stack_id/members"),
+    ("DELETE", "/v1/stacks/:stack_id/members/:resource_type/:resource_id"),
+    ("POST", "/v1/stacks/:stack_id/network-mode"),
+    ("GET", "/v1/stacks/:stack_id/snapshots"),
+    ("POST", "/v1/stacks/:stack_id/snapshots"),
+    ("POST", "/v1/stacks/:stack_id/snapshots/:snapshot_id/restore"),
+    ("POST", "/v1/stacks/:stack_id/template/detach"),
+    ("GET", "/v1/stacks/:stack_id/template/update"),
+    ("POST", "/v1/stacks/:stack_id/template/update"),
+    ("POST", "/v1/stacks/transform"),
+    ("GET", "/v1/template-deploys/:deploy_id"),
+    ("GET", "/v1/template-deploys/:deploy_id/events"),
+    ("GET", "/v1/templates"),
+    ("POST", "/v1/templates"),
+    ("DELETE", "/v1/templates/:template_id"),
+    ("GET", "/v1/templates/:template_id"),
+    ("PATCH", "/v1/templates/:template_id"),
+    ("POST", "/v1/templates/:template_id/deploy"),
+    ("DELETE", "/v1/templates/:template_id/github"),
+    ("PUT", "/v1/templates/:template_id/github"),
+    ("GET", "/v1/templates/:template_id/share-links"),
+    ("POST", "/v1/templates/:template_id/share-links"),
+    ("DELETE", "/v1/templates/:template_id/share-links/:link_id"),
+    ("GET", "/v1/templates/:template_id/versions"),
+    ("POST", "/v1/templates/:template_id/versions"),
+    ("GET", "/v1/templates/categories"),
+    ("POST", "/v1/templates/from-app/:app_id"),
+    ("GET", "/v1/templates/from-app/:app_id/draft"),
+    ("POST", "/v1/templates/from-stack/:stack_id"),
+    ("GET", "/v1/templates/from-stack/:stack_id/draft"),
+    ("POST", "/v1/templates/validate"),
+    ("DELETE", "/v1/workspaces/:id/stacks/:stack_id"),
+    ("POST", "/v1/workspaces/:id/stacks/:stack_id"),
+    ("DELETE", "/v1/workspaces/:id/templates/:template_id"),
+    ("POST", "/v1/workspaces/:id/templates/:template_id"),
 ]
 
-assert len(FROZEN_ROUTES) == 121, f"expected 121 frozen routes, found {len(FROZEN_ROUTES)}"
+assert len(FROZEN_ROUTES) == 177, f"expected 177 frozen routes, found {len(FROZEN_ROUTES)}"
 
 # Forbidden paths: none of these may appear, in any form, in `src/vertracloud/**`.
 FORBIDDEN_PATHS: list[str] = [

@@ -8,6 +8,7 @@ from ..client import encode_path_param
 from ..types import (
     APIDatabase,
     APIDatabaseCertificate,
+    APIDatabaseCertificateReset,
     APIDatabasePasswordReset,
     APIDatabaseStatus,
     APIDatabaseStatusShort,
@@ -36,8 +37,10 @@ class DatabaseCertificateResource:
             timeout=timeout,
         )
 
-    def reset(self, db_id: str, *, workspace_id: str | None = None) -> None:
-        """POST /v1/databases/:id/credentials/certificate/reset — scope `databases:credentials`."""
+    def reset(self, db_id: str, *, workspace_id: str | None = None) -> APIDatabaseCertificateReset:
+        """POST /v1/databases/:id/credentials/certificate/reset — scope `databases:credentials`. Besides the new
+        certificate, the answer lists the apps of stacks connected to the database that must restart to read it
+        (`restart_required`, `apps_to_restart`)."""
         return self._c.request_json(
             "POST",
             f"/v1/databases/{encode_path_param(db_id)}/credentials/certificate/reset",
@@ -50,7 +53,9 @@ class DatabasePasswordResource:
         self._c = client
 
     def reset(self, db_id: str, *, workspace_id: str | None = None) -> APIDatabasePasswordReset:
-        """POST /v1/databases/:id/credentials/reset — scope `databases:credentials`."""
+        """POST /v1/databases/:id/credentials/reset — scope `databases:credentials`. The answer also lists the apps
+        of stacks connected to the database that must restart to read the new password (`restart_required`,
+        `apps_to_restart`)."""
         return self._c.request_json(
             "POST", f"/v1/databases/{encode_path_param(db_id)}/credentials/reset", query={"workspace_id": workspace_id}
         )

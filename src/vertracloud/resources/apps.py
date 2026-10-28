@@ -73,7 +73,8 @@ class AppDeploysWebhookResource:
         )
 
     def create(self, app_id: str, body: CreateWebhookBody, *, workspace_id: str | None = None) -> APIWebhookUrl:
-        """POST /v1/apps/:id/deploys/webhook — scope `apps:write`."""
+        """POST /v1/apps/:id/deploys/webhook — scope `apps:write`. `body["confirm_detach"]` confirms that linking
+        GitHub detaches an app of an open template from it (`TEMPLATE_DETACH_CONFIRMATION_REQUIRED` otherwise)."""
         return self._c.request_json(
             "POST",
             f"/v1/apps/{encode_path_param(app_id)}/deploys/webhook",
@@ -335,9 +336,22 @@ class AppFilesResource:
         content: str | None = None,
         last_modified: str | None = None,
         workspace_id: str | None = None,
+        confirm_detach: bool = False,
     ) -> None:
-        """PUT /v1/apps/:id/files — scope `apps:files`. Response is void."""
-        body = {"path": path, "content": content, "last_modified": last_modified, "workspace_id": workspace_id}
+        """PUT /v1/apps/:id/files — scope `apps:files`. Response is void.
+
+        An app that came from an open template stops receiving versions of it when its code is changed: without
+        `confirm_detach=True` the call fails with `TEMPLATE_DETACH_CONFIRMATION_REQUIRED` and changes nothing
+        (`VertraAPIError.detach_action` says which action); with it the change is made and the app is detached.
+        Ignored for an app that does not come from a template. The same applies to `move`, `delete`, `upload`
+        and `deploys.webhook.create`."""
+        body = {
+            "path": path,
+            "content": content,
+            "last_modified": last_modified,
+            "workspace_id": workspace_id,
+            "confirm_detach": True if confirm_detach else None,
+        }
         return self._c.request_json(
             "PUT",
             f"/v1/apps/{encode_path_param(app_id)}/files",
@@ -345,7 +359,8 @@ class AppFilesResource:
         )
 
     def move(self, app_id: str, body: MoveFileBody, *, workspace_id: str | None = None) -> None:
-        """PATCH /v1/apps/:id/files — scope `apps:files`. Body: `{path, to, workspace_id?}`."""
+        """PATCH /v1/apps/:id/files — scope `apps:files`. Body: `{path, to, workspace_id?, confirm_detach?}`
+        (see `write` for `confirm_detach`)."""
         merged = {**body, "workspace_id": workspace_id or body.get("workspace_id")}
         return self._c.request_json(
             "PATCH",
@@ -353,9 +368,10 @@ class AppFilesResource:
             json_body={k: v for k, v in merged.items() if v is not None},
         )
 
-    def delete(self, app_id: str, *, path: str, workspace_id: str | None = None) -> None:
-        """DELETE /v1/apps/:id/files — scope `apps:files`. Body: `{path, workspace_id?}`."""
-        body = {"path": path, "workspace_id": workspace_id}
+    def delete(self, app_id: str, *, path: str, workspace_id: str | None = None, confirm_detach: bool = False) -> None:
+        """DELETE /v1/apps/:id/files — scope `apps:files`. Body: `{path, workspace_id?, confirm_detach?}`
+        (see `write` for `confirm_detach`)."""
+        body = {"path": path, "workspace_id": workspace_id, "confirm_detach": True if confirm_detach else None}
         return self._c.request_json(
             "DELETE",
             f"/v1/apps/{encode_path_param(app_id)}/files",
@@ -372,6 +388,7 @@ class AppFilesResource:
         path: str | None = None,
         message: str | None = None,
         workspace_id: str | None = None,
+        confirm_detach: bool = False,
         timeout: float | None = None,
     ) -> APIAppFileUploadResponse:
         """POST /v1/apps/:id/files/upload — scope `apps:files`. Multipart, field `file`;
@@ -379,6 +396,7 @@ class AppFilesResource:
         `path` is the destination folder inside the app (omitted or empty means the root);
         a ZIP is extracted into it, any other file is written to `path/<filename>`.
         `message` (up to 500 characters) is the commit message shown in the release history.
+        `confirm_detach=True` is sent as the query `confirm_detach=true` (see `write`).
         Returns `app_id` and `updated_at`; ZIP uploads also include dependency metadata."""
         fields = [MultipartField("file", file, filename=filename)]
         if message is not None:
@@ -387,7 +405,12 @@ class AppFilesResource:
             "POST",
             f"/v1/apps/{encode_path_param(app_id)}/files/upload",
             fields=fields,
-            query={"restart": restart, "path": path, "workspace_id": workspace_id},
+            query={
+                "restart": restart,
+                "path": path,
+                "workspace_id": workspace_id,
+                "confirm_detach": True if confirm_detach else None,
+            },
             timeout=timeout if timeout is not None else LARGE_PAYLOAD_TIMEOUT,
         )
 
@@ -502,7 +525,9 @@ class AppsResource:
         """POST /v1/apps/image — scope `apps:write`. JSON. Creates an app that runs from a custom
         image, which must be ready (`images.get(...)["status"] == "success"`). Replies 202 with
         `status: "building"` and `custom_image` filled in; follow the build as with `create`.
-        `web: False` makes an app without traffic; `subdomain` and `port` need `web: True`.
+        `web: False` makes an app without traffic; `subdomain` and `port` need `web: True`. An image that
+        belongs to a template (a platform image or a `template_copy`) fails with `IMAGE_TEMPLATE_ONLY`: use the
+        template instead.
         Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/create-from-image
         """
         return self._c.request_json("POST", "/v1/apps/image", json_body=body)

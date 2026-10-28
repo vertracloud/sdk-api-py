@@ -165,12 +165,15 @@ class PutFileBody(TypedDict, total=False):
 class DeleteFileBody(TypedDict, total=False):
     path: str
     workspace_id: str
+    confirm_detach: bool
 
 
 class MoveFileBody(TypedDict, total=False):
     path: str
     to: str
     workspace_id: str
+    # Confirms that the change detaches an app of an open template from it (`TEMPLATE_DETACH_CONFIRMATION_REQUIRED`).
+    confirm_detach: bool
 
 
 class _CreateWebhookBodyRequired(TypedDict):
@@ -185,9 +188,12 @@ class CreateWebhookBody(_CreateWebhookBodyRequired, total=False):
 
     `branch` is the only branch the auto-deploy reacts to. Without it, a push on `main` or `master`
     deploys, as it always did. Linking again with another `branch` changes it; linking again
-    without one goes back to `main` or `master`."""
+    without one goes back to `main` or `master`.
+
+    `confirm_detach` confirms that the change detaches an app of an open template from it."""
 
     branch: str
+    confirm_detach: bool
 
 
 class _CreateDatabaseBodyRequired(TypedDict):
@@ -223,14 +229,28 @@ class UpdateAccountBody(TypedDict, total=False):
     email: str
 
 
+class WorkspaceFolderFlowLayout(TypedDict, total=False):
+    """Position of a folder on the Flow canvas."""
+
+    x: float
+    y: float
+    collapsed: bool
+
+
 class CreateFolderBody(TypedDict, total=False):
     name: str
     parent_id: str | None
+    # Free-text notes; `None` removes them (on update).
+    notes: str | None
+    # Position on the Flow canvas; `None` removes it (on update).
+    flow_layout: WorkspaceFolderFlowLayout | None
 
 
 class UpdateFolderBody(TypedDict, total=False):
     name: str
     parent_id: str | None
+    notes: str | None
+    flow_layout: WorkspaceFolderFlowLayout | None
 
 
 class CreateWorkspaceBody(TypedDict, total=False):
@@ -415,6 +435,12 @@ class _APIApplicationRequired(TypedDict):
 class APIApplication(_APIApplicationRequired, total=False):
     description: str
     github: APIApplicationGithub | None
+    # Stack the app belongs to; `None` when it is not in one.
+    stack_id: str | None
+    # Id of the service of the stack's template this app is; `None` when the user added it.
+    stack_service_key: str | None
+    # Template the app was created from; `None` (or absent) for an app that did not come from one.
+    template: APIApplicationTemplate | None
 
 
 class APIApplicationCreated(APIApplication, total=False):
@@ -477,12 +503,26 @@ class APIApplicationMetric(TypedDict):
     network: list[float]
 
 
-class APIApplicationEnvironment(TypedDict):
+class APIApplicationEnvironmentManager(TypedDict):
+    """The connection of a stack that manages a variable: the platform keeps it up to date."""
+
+    type: Literal["stack_binding"]
+    binding_id: str
+    # `None` for the address variable of an application that is not in a stack.
+    stack_id: str | None
+
+
+class _APIApplicationEnvironmentRequired(TypedDict):
     id: str
     key: str
     value: str
     note: str | None
     created_at: str
+
+
+class APIApplicationEnvironment(_APIApplicationEnvironmentRequired, total=False):
+    # Set when a stack connection manages the variable. Editing it by hand turns it into an ordinary variable.
+    managed_by: APIApplicationEnvironmentManager | None
 
 
 class APIApplicationOperationResponse(TypedDict):
@@ -626,7 +666,7 @@ class APIRuntimeEntry(TypedDict):
 APIRuntimesResponse = dict[str, APIRuntimeEntry]
 
 
-class APIDatabase(TypedDict):
+class _APIDatabaseRequired(TypedDict):
     id: str
     cluster: int
     type: int
@@ -645,6 +685,13 @@ class APIDatabase(TypedDict):
     version: str
     """Engine major line, e.g. `"18"` or `"8.0"`; the patch is never exposed. Not limited to the
     catalog: older databases may report a line that is no longer offered for new ones."""
+
+
+class APIDatabase(_APIDatabaseRequired, total=False):
+    # Stack the database belongs to; `None` when it is not in one.
+    stack_id: str | None
+    # Id of the service of the stack's template this database is; `None` when the user added it.
+    stack_service_key: str | None
 
 
 class APIDatabaseVersionCatalog(TypedDict):
@@ -688,7 +735,15 @@ class APIDatabaseMetrics(TypedDict):
     network: list[float]
 
 
-class APIDatabasePasswordReset(TypedDict):
+class APIRestartRequired(TypedDict):
+    """Answer of a change that alters variables or certificates of applications in a stack: an app reads them
+    only when it starts, so the restart is yours to ask for."""
+
+    restart_required: bool
+    apps_to_restart: list[str]
+
+
+class APIDatabasePasswordReset(APIRestartRequired):
     password: str
 
 
@@ -698,7 +753,11 @@ class APIDatabaseCertificate(TypedDict):
     pem: str
 
 
-class APIResourceSnapshot(TypedDict):
+class APIDatabaseCertificateReset(APIDatabaseCertificate, APIRestartRequired):
+    """New certificate after `databases.credentials.certificate.reset`, with the apps that must restart to read it."""
+
+
+class _APIResourceSnapshotRequired(TypedDict):
     id: str
     resource_id: str
     author_id: str | None
@@ -706,6 +765,12 @@ class APIResourceSnapshot(TypedDict):
     size: str
     date: str
     resource_name: str | None
+
+
+class APIResourceSnapshot(_APIResourceSnapshotRequired, total=False):
+    # True for a snapshot of an app of a closed template: it cannot be downloaded, only restores into an app of the
+    # same template (anything else fails with `TEMPLATE_CLOSED`).
+    closed: bool
 
 
 class APIGroupedResourceSnapshots(TypedDict):
@@ -754,7 +819,7 @@ class APIUserPlan(TypedDict):
 
 
 class APIWorkspaceResourceRef(TypedDict):
-    resource_type: Literal["application", "database"]
+    resource_type: Literal["application", "database", "image", "stack"]
     resource_id: str
 
 
@@ -762,7 +827,7 @@ class APIWorkspaceFolderItem(APIWorkspaceResourceRef):
     position: int
 
 
-class APIWorkspaceResourceFolder(TypedDict):
+class _APIWorkspaceResourceFolderRequired(TypedDict):
     id: str
     name: str
     color: str
@@ -770,6 +835,13 @@ class APIWorkspaceResourceFolder(TypedDict):
     resources: list[APIWorkspaceFolderItem]
     created_at: str
     updated_at: str
+
+
+class APIWorkspaceResourceFolder(_APIWorkspaceResourceFolderRequired, total=False):
+    # Free-text notes of the folder; `None` when it has none.
+    notes: str | None
+    # Position of the folder on the Flow canvas; `None` until it is placed.
+    flow_layout: WorkspaceFolderFlowLayout | None
 
 
 class APIWorkspaceFavorite(APIWorkspaceResourceRef):
@@ -1242,7 +1314,19 @@ class APICustomImageGithub(TypedDict):
     branch: str
 
 
-class APICustomImage(TypedDict):
+CustomImageKind = Literal["own", "template_copy"]
+
+
+class APICustomImageOrigin(TypedDict):
+    """Readable origin of an image that came from a template."""
+
+    template_id: str
+    template_name: APITemplateI18nText
+    # Author as shown to you; `None` for a template of the platform.
+    author_display: str | None
+
+
+class _APICustomImageRequired(TypedDict):
     id: str
     name: str
     # Free-text description, up to 128 characters; None when the image has none.
@@ -1260,6 +1344,14 @@ class APICustomImage(TypedDict):
     current_version_id: str | None
     created_at: str
     updated_at: str
+
+
+class APICustomImage(_APICustomImageRequired, total=False):
+    # `"own"` (built from your own context) or `"template_copy"` (the slot an image of a template takes in your
+    # account: it cannot be rebuilt or edited, `IMAGE_TEMPLATE_ONLY`). Absent in older payloads, where it means `"own"`.
+    kind: CustomImageKind
+    # Template the image came from when `kind` is `"template_copy"`; `None` otherwise.
+    origin: APICustomImageOrigin | None
 
 
 class APICustomImageVersion(TypedDict):
@@ -1348,3 +1440,1031 @@ class CreateAppFromImageBody(_CreateAppFromImageRequired, total=False):
     port: int
     envs: list[EnvEntry]
     workspace_id: str
+
+
+# -- Templates and stacks: `templates.*`, `stacks.*` ----------------------------------------------
+
+TemplateOrigin = Literal["vertra", "community", "private"]
+TemplateVisibility = Literal["public", "beta", "hidden", "deprecated"]
+TemplateCategory = Literal[
+    "automation", "ai-agents", "bots", "apis", "cms", "monitoring", "starters", "databases", "other"
+]
+TemplateSourceType = Literal["code", "image"]
+TemplateWebMode = Literal["required", "optional", "none"]
+TemplateInputType = Literal["text", "secret", "select", "boolean", "number", "url", "email"]
+TemplateDatabaseEngine = Literal["postgres", "mysql", "mongodb", "redis"]
+TemplateBlobVisibility = Literal["private", "public"]
+TemplateShareLinkMode = Literal["use", "full_copy"]
+TemplateDeployStatus = Literal["queued", "running", "undoing", "succeeded", "failed"]
+TemplateDeployKind = Literal["deploy", "update"]
+TemplateDeployStep = Literal[
+    "validate",
+    "snapshot",
+    "network",
+    "databases",
+    "blob",
+    "images",
+    "apps",
+    "variables",
+    "certificates",
+    "start",
+    "healthcheck",
+    "outputs",
+    "rollback",
+]
+TemplateDeployStepStatus = Literal["pending", "running", "done", "skipped", "failed"]
+TemplateReportReason = Literal["malware", "scam", "copyright", "leaked_secret", "other"]
+TemplateFitReason = Literal[
+    "no_plan",
+    "ram",
+    "web_publish",
+    "image_plan",
+    "image_slots",
+    "private_network",
+    "blob_plan",
+    "min_plan",
+    "max_apps",
+    "max_databases",
+    "deploys_per_hour",
+]
+TemplateUpdateBlockReason = Literal[
+    "no_new_version",
+    "detached",
+    "template_removed",
+    "link_revoked",
+    "ram",
+    "plan",
+    "image_slots",
+    "app_building",
+    "deploy_in_progress",
+]
+TemplateValidationCode = Literal[
+    "invalid_type",
+    "required",
+    "unknown_field",
+    "invalid_slug",
+    "invalid_version",
+    "invalid_category",
+    "invalid_text",
+    "invalid_ram",
+    "invalid_plan",
+    "unknown_placeholder",
+    "unknown_service",
+    "unknown_input",
+    "invalid_when",
+    "invalid_option",
+    "invalid_source",
+    "invalid_permissions",
+    "forbidden_env",
+    "forbidden_in_public",
+    "secret_in_manifest",
+    "invalid_deploy",
+    "invalid_connection",
+    "duplicate_id",
+    "too_many_services",
+]
+TemplateEnvReviewMode = Literal["question", "keep", "generate", "hidden", "omit"]
+TemplateDetachConfirmationAction = Literal["files.write", "deploy.code", "deploy.github", "commit"]
+TemplateListSort = Literal["recommended", "popular", "newest", "name"]
+TemplateInputValue = str | int | float | bool
+
+# Limits of the manifest texts.
+TEMPLATE_NAME_MAX_LENGTH = 50
+TEMPLATE_DESCRIPTION_MAX_LENGTH = 128
+
+_APITemplateI18nTextRequired = TypedDict("_APITemplateI18nTextRequired", {"pt-br": str})
+
+
+class APITemplateI18nText(_APITemplateI18nTextRequired, total=False):
+    """Text in up to three languages; `pt-br` is required (the fallback)."""
+
+    en: str
+    es: str
+
+
+class APITemplateEffectivePermissions(TypedDict):
+    code_view: bool
+    code_edit: bool
+    ram_change: bool
+    ram_below_min: bool
+    ram_above_max: bool
+    env_add: bool
+    commands_edit: bool
+    terminal: bool
+    save_as_template: bool
+    detach: bool
+
+
+class _APITemplateOriginRequired(TypedDict):
+    template_id: str
+    slug: str
+    name: APITemplateI18nText
+    icon_url: str | None
+    origin: TemplateOrigin
+    version_id: str
+    version: str
+    closed: bool
+    detached: bool
+    update_available: bool
+    latest_version: str | None
+    removed: bool
+    via_share_link: bool
+
+
+class APITemplateOrigin(_APITemplateOriginRequired):
+    """Where an app or a stack came from: the template, its version and whether it still follows it."""
+
+
+class APIApplicationTemplate(APITemplateOrigin):
+    """`APIApplication.template`: the origin plus the service this app is and what the user can do with it."""
+
+    service_id: str | None
+    permissions: APITemplateEffectivePermissions
+
+
+# -- manifest (what a private template is made of; the public catalog uses the same shape)
+
+
+class APITemplateLinks(TypedDict, total=False):
+    website: str
+    docs: str
+    source: str
+    license: str
+
+
+class _APITemplateRamRequired(TypedDict):
+    min: int
+    recommended: int
+
+
+class APITemplateRam(_APITemplateRamRequired, total=False):
+    max: int
+
+
+class APITemplateWhen(TypedDict):
+    input: str
+    equals: str | int | float | bool
+
+
+class APITemplateInputValidation(TypedDict, total=False):
+    regex: str
+    min: float
+    max: float
+    min_length: int
+    max_length: int
+
+
+class APITemplateOptionSets(TypedDict, total=False):
+    services: dict[str, Literal["on", "off"]]
+    env: dict[str, dict[str, str]]
+    ram_extra: dict[str, int]
+
+
+class _APITemplateInputOptionRequired(TypedDict):
+    value: str
+
+
+class APITemplateInputOption(_APITemplateInputOptionRequired, total=False):
+    label: APITemplateI18nText
+    sets: APITemplateOptionSets
+
+
+class _APITemplateInputRequired(TypedDict):
+    id: str
+    type: TemplateInputType
+    label: APITemplateI18nText
+
+
+class APITemplateInput(_APITemplateInputRequired, total=False):
+    help: APITemplateI18nText
+    required: bool
+    default: TemplateInputValue
+    validation: APITemplateInputValidation
+    generate: str
+    editable: bool
+    when: APITemplateWhen
+    options: list[APITemplateInputOption]
+
+
+class APITemplatePermissions(TypedDict, total=False):
+    """What the people who use the template may do; each group is optional."""
+
+    code: dict[str, bool]
+    ram: dict[str, bool]
+    env: dict[str, bool]
+    commands: dict[str, bool]
+    version: dict[str, bool]
+    share: dict[str, bool]
+
+
+class APITemplateDeploySettings(TypedDict, total=False):
+    zero_downtime: dict[str, Any]
+    auto_rollback: dict[str, Any]
+    rollback: dict[str, Any]
+
+
+class _APITemplateSourceRequired(TypedDict):
+    type: TemplateSourceType
+
+
+class APITemplateSource(_APITemplateSourceRequired, total=False):
+    image: str
+    path: str
+    context: str
+
+
+class _APITemplateHealthcheckRequired(TypedDict):
+    timeout: int
+
+
+class APITemplateHealthcheck(_APITemplateHealthcheckRequired, total=False):
+    path: str
+
+
+class _APITemplateAppServiceRequired(TypedDict):
+    source: APITemplateSource
+    ram: APITemplateRam
+    web: TemplateWebMode
+
+
+class APITemplateAppService(_APITemplateAppServiceRequired, total=False):
+    language: ApplicationLanguage
+    runtime_version: str
+    main: str
+    build: str
+    start: str
+    port: int
+    env: dict[str, str]
+    env_hidden: list[str]
+    healthcheck: APITemplateHealthcheck
+    deploy: APITemplateDeploySettings
+    connections: dict[str, dict[str, Literal["required"]]]
+
+
+class _APITemplateDatabaseServiceRequired(TypedDict):
+    database: TemplateDatabaseEngine
+    ram: APITemplateRam
+
+
+class APITemplateDatabaseService(_APITemplateDatabaseServiceRequired, total=False):
+    version: str
+    when: APITemplateWhen
+
+
+class _APITemplateBlobServiceRequired(TypedDict):
+    blob: dict[str, TemplateBlobVisibility]
+
+
+class APITemplateBlobService(_APITemplateBlobServiceRequired, total=False):
+    when: APITemplateWhen
+
+
+APITemplateService = APITemplateAppService | APITemplateDatabaseService | APITemplateBlobService
+
+
+class _APITemplateOutputRequired(TypedDict):
+    label: APITemplateI18nText
+    value: str | APITemplateI18nText
+
+
+class APITemplateOutput(_APITemplateOutputRequired, total=False):
+    secret: bool
+    once: bool
+
+
+class _APITemplateManifestRequired(TypedDict):
+    id: str
+    version: str
+    name: APITemplateI18nText
+    description: APITemplateI18nText
+    category: TemplateCategory
+    services: dict[str, APITemplateService]
+
+
+class APITemplateManifest(_APITemplateManifestRequired, total=False):
+    tags: list[str]
+    icon: str
+    links: APITemplateLinks
+    landing: str
+    min_plan: str
+    inputs: list[APITemplateInput]
+    permissions: APITemplatePermissions
+    outputs: list[APITemplateOutput]
+    secrets: list[str]
+    byok: bool
+
+
+# -- catalog
+
+
+class APITemplateServiceSummary(TypedDict):
+    id: str
+    kind: Literal["app", "database", "blob"]
+    source_type: TemplateSourceType | None
+    database: TemplateDatabaseEngine | None
+    blob_visibility: TemplateBlobVisibility | None
+    ram: APITemplateRam
+    web: TemplateWebMode | None
+    conditional: bool
+
+
+class APITemplateOwner(TypedDict):
+    user_id: str
+    workspace_id: str | None
+
+
+class APITemplateVersionSummary(TypedDict):
+    id: str
+    version: str
+    security: bool
+    created_at: str
+
+
+class _APITemplateFitIssueRequired(TypedDict):
+    reason: TemplateFitReason
+
+
+class APITemplateFitIssue(_APITemplateFitIssueRequired, total=False):
+    required: int | str
+    available: int | str
+
+
+class APITemplateAccountContext(TypedDict):
+    """How the template fits the account of the caller (only with authentication)."""
+
+    fits: bool
+    reasons: list[APITemplateFitIssue]
+    required_ram: int
+    free_ram: int
+    needs_image_slot: bool
+    image_slots_free: int
+    in_use: bool
+    in_use_count: int
+
+
+class APITemplateGithubLink(TypedDict):
+    repository: str
+    branch: str
+
+
+class _APITemplateRequired(TypedDict):
+    id: str
+    slug: str
+    origin: TemplateOrigin
+    visibility: TemplateVisibility
+    name: APITemplateI18nText
+    description: APITemplateI18nText
+    category: TemplateCategory
+    tags: list[str]
+    icon_url: str | None
+    author_display: str | None
+    links: APITemplateLinks
+    landing: str | None
+    featured: bool
+    current_version: APITemplateVersionSummary
+    services: list[APITemplateServiceSummary]
+    creates_stack: bool
+    ram_min_total: int
+    byok: bool
+    required_plan: str
+    code_view: bool
+    uses_count: int | None
+    owner: APITemplateOwner | None
+    github: APITemplateGithubLink | None
+    created_at: str
+    updated_at: str
+
+
+class APITemplate(_APITemplateRequired, total=False):
+    # Only for an authenticated caller.
+    account: APITemplateAccountContext
+
+
+class APITemplateDetail(APITemplate):
+    inputs: list[APITemplateInput]
+    permissions: APITemplateEffectivePermissions
+    outputs: list[APITemplateOutput]
+    readme: APITemplateI18nText | None
+    changelog: APITemplateI18nText | None
+
+
+class APITemplateVersion(APITemplateVersionSummary):
+    changelog: APITemplateI18nText | None
+    manifest: APITemplateManifest | None
+
+
+class APITemplateCategoryCount(TypedDict):
+    category: TemplateCategory
+    count: int
+
+
+class APITemplatePage(TypedDict):
+    """One page of `templates.list`."""
+
+    data: list[APITemplate]
+    total_count: int
+    page: int
+    limit: int
+    total_pages: int
+    has_next_page: bool
+    has_previous_page: bool
+
+
+class APITemplateValidationIssue(TypedDict):
+    path: str
+    code: TemplateValidationCode
+    message: str
+
+
+class APITemplateValidation(TypedDict):
+    valid: bool
+    issues: list[APITemplateValidationIssue]
+    required_plan: str | None
+    ram_min_total: int | None
+    services: list[APITemplateServiceSummary]
+
+
+# -- deploy
+
+
+class APITemplateDeployStepState(TypedDict):
+    step: TemplateDeployStep
+    status: TemplateDeployStepStatus
+    started_at: str | None
+    finished_at: str | None
+
+
+class _APITemplateDeployErrorRequired(TypedDict):
+    code: str
+    message: str
+    step: TemplateDeployStep | None
+
+
+class APITemplateDeployError(_APITemplateDeployErrorRequired, total=False):
+    details: dict[str, Any]
+
+
+class APITemplateDeployResource(TypedDict):
+    resource_type: Literal["application", "database", "image", "stack"]
+    resource_id: str
+    service_id: str | None
+    name: str
+
+
+class APITemplateDeployOutput(TypedDict):
+    """An output of the template. `once` outputs come back on the first read of a finished job only."""
+
+    label: APITemplateI18nText
+    value: str | APITemplateI18nText | None
+    secret: bool
+    once: bool
+
+
+class APITemplateDeploy(TypedDict):
+    id: str
+    kind: TemplateDeployKind
+    template_id: str
+    version_id: str
+    version: str
+    status: TemplateDeployStatus
+    current_step: TemplateDeployStep | None
+    steps: list[APITemplateDeployStepState]
+    error: APITemplateDeployError | None
+    resources: list[APITemplateDeployResource]
+    stack_id: str | None
+    application_id: str | None
+    outputs: list[APITemplateDeployOutput]
+    created_at: str
+    updated_at: str
+    finished_at: str | None
+
+
+class APITemplateDeployEvent(TypedDict):
+    """One progress event of `templates.deploys.events`. Outputs are never on the stream: read them with `get`."""
+
+    deploy_id: str
+    status: TemplateDeployStatus
+    current_step: TemplateDeployStep | None
+    steps: list[APITemplateDeployStepState]
+    error: APITemplateDeployError | None
+
+
+class TemplateDeployServiceOptions(TypedDict, total=False):
+    name: str
+    ram: int
+    subdomain: str
+
+
+class _TemplateDeployBodyRequired(TypedDict):
+    name: str
+
+
+class TemplateDeployBody(_TemplateDeployBodyRequired, total=False):
+    """`POST /v1/templates/:id/deploy`. The idempotency key is not a field: pass `idempotency_key=` to `deploy`."""
+
+    description: str
+    # Only valid when the template lets you choose the version; default: the latest.
+    version: str
+    inputs: dict[str, TemplateInputValue]
+    services: dict[str, TemplateDeployServiceOptions]
+    network_mode: StackNetworkMode
+    workspace_id: str
+    folder_id: str
+
+
+class _TemplateShareDeployBodyRequired(TypedDict):
+    name: str
+
+
+class TemplateShareDeployBody(_TemplateShareDeployBodyRequired, total=False):
+    """`POST /v1/share/templates/:token/deploy`: as `TemplateDeployBody`, without a version."""
+
+    description: str
+    inputs: dict[str, TemplateInputValue]
+    services: dict[str, TemplateDeployServiceOptions]
+    network_mode: StackNetworkMode
+    workspace_id: str
+    folder_id: str
+
+
+# -- updates and detaching
+
+
+class APITemplateUpdateBlocked(TypedDict, total=False):
+    reason: TemplateUpdateBlockReason
+    details: dict[str, Any]
+
+
+class APITemplateRamChange(TypedDict):
+    service_id: str
+    current: int
+    required_min: int
+
+
+class APITemplateUpdateInfo(TypedDict):
+    update_available: bool
+    current_version: str
+    latest_version: str | None
+    security: bool
+    changelog: APITemplateI18nText | None
+    new_inputs: list[APITemplateInput]
+    added_services: list[APITemplateServiceSummary]
+    removed_services: list[str]
+    ram_changes: list[APITemplateRamChange]
+    free_ram: int
+    opens_permissions: bool
+    rollback_with_data: bool
+    blocked: APITemplateUpdateBlocked | None
+
+
+class TemplateUpdateBody(TypedDict, total=False):
+    inputs: dict[str, TemplateInputValue]
+    ram: dict[str, int]
+
+
+# -- private templates
+
+
+class _TemplateCreateBodyRequired(TypedDict):
+    manifest: APITemplateManifest | dict[str, Any]
+
+
+class TemplateCreateBody(_TemplateCreateBodyRequired, total=False):
+    """`POST /v1/templates` (multipart). The ZIP of each service that runs code goes in `sources`, by service id."""
+
+    changelog: APITemplateI18nText
+    workspace_id: str
+
+
+class _TemplateVersionBodyRequired(TypedDict):
+    manifest: APITemplateManifest | dict[str, Any]
+
+
+class TemplateVersionBody(_TemplateVersionBodyRequired, total=False):
+    changelog: APITemplateI18nText
+
+
+class _TemplateEnvReviewRequired(TypedDict):
+    key: str
+    mode: TemplateEnvReviewMode
+
+
+class TemplateEnvReview(_TemplateEnvReviewRequired, total=False):
+    label: APITemplateI18nText
+    help: APITemplateI18nText
+    generate: str
+
+
+class _TemplateFromMemberRequired(TypedDict):
+    resource_id: str
+    service_id: str
+
+
+class TemplateFromMember(_TemplateFromMemberRequired, total=False):
+    env: list[TemplateEnvReview]
+    paths: list[str]
+    ram: APITemplateRam
+
+
+class _TemplateFromAppBodyRequired(TypedDict):
+    id: str
+    name: APITemplateI18nText
+    description: APITemplateI18nText
+    category: TemplateCategory
+    member: TemplateFromMember
+
+
+class TemplateFromAppBody(_TemplateFromAppBodyRequired, total=False):
+    tags: list[str]
+    version: str
+    permissions: APITemplatePermissions
+    workspace_id: str
+
+
+class _TemplateFromStackBodyRequired(TypedDict):
+    id: str
+    name: APITemplateI18nText
+    description: APITemplateI18nText
+    category: TemplateCategory
+    members: list[TemplateFromMember]
+
+
+class TemplateFromStackBody(_TemplateFromStackBodyRequired, total=False):
+    tags: list[str]
+    version: str
+    permissions: APITemplatePermissions
+    workspace_id: str
+
+
+class APITemplateDraftEnv(TypedDict):
+    key: str
+    looks_secret: bool
+    suggested_mode: TemplateEnvReviewMode
+
+
+class APITemplateDraftPath(TypedDict):
+    path: str
+    type: Literal["file", "directory"]
+    selected: bool
+    reason: Literal["env_file", "platform_folder", "dependencies", "database_file", "uploads"] | None
+
+
+class APITemplateDraftMember(TypedDict):
+    resource_id: str
+    resource_type: Literal["application", "database"]
+    name: str
+    ram: APITemplateRam
+    env: list[APITemplateDraftEnv]
+    paths: list[APITemplateDraftPath]
+
+
+class APITemplateDraft(TypedDict):
+    """What an app or stack would put in a template: review the variables and paths before `from_app`/`from_stack`."""
+
+    members: list[APITemplateDraftMember]
+
+
+class TemplateUpdateDetailsBody(TypedDict, total=False):
+    name: APITemplateI18nText
+    description: APITemplateI18nText
+    category: TemplateCategory
+    tags: list[str]
+
+
+class _TemplateGithubLinkBodyRequired(TypedDict):
+    repository: str
+
+
+class TemplateGithubLinkBody(_TemplateGithubLinkBodyRequired, total=False):
+    branch: str
+
+
+class _TemplateReportBodyRequired(TypedDict):
+    reason: TemplateReportReason
+
+
+class TemplateReportBody(_TemplateReportBodyRequired, total=False):
+    details: str
+
+
+# -- share links
+
+
+class TemplateShareLinkCreateBody(TypedDict, total=False):
+    mode: TemplateShareLinkMode
+    max_uses: int
+    expires_in_days: int
+
+
+class APITemplateShareLink(TypedDict):
+    id: str
+    template_id: str
+    mode: TemplateShareLinkMode
+    last4: str
+    uses: int
+    max_uses: int | None
+    expires_at: str | None
+    revoked_at: str | None
+    created_at: str
+
+
+class APITemplateShareLinkCreated(APITemplateShareLink):
+    """The token appears here only: it is not shown again."""
+
+    token: str
+
+
+class _APITemplateSharePreviewRequired(TypedDict):
+    mode: TemplateShareLinkMode
+    name: APITemplateI18nText
+    description: APITemplateI18nText
+    category: TemplateCategory
+    icon_url: str | None
+    author_display: str | None
+    version: str
+    services: list[APITemplateServiceSummary]
+    creates_stack: bool
+    ram_min_total: int
+    required_plan: str
+    image_slots_needed: int
+    verified: Literal[False]
+    code_view: bool
+    byok: bool
+    inputs: list[APITemplateInput]
+    permissions: APITemplateEffectivePermissions
+
+
+class APITemplateSharePreview(_APITemplateSharePreviewRequired, total=False):
+    account: APITemplateAccountContext
+
+
+class TemplateShareCopyBody(TypedDict, total=False):
+    workspace_id: str
+
+
+# -- stacks
+
+StackNetworkMode = Literal["public", "private"]
+StackMemberType = Literal["application", "database", "blob"]
+StackBlobDisposition = Literal["keep", "delete"]
+StackBindingRemoval = Literal["keep_connection", "remove_variables"]
+StackDeleteMode = Literal["dissolve", "delete_all"]
+StackSnapshotReason = Literal["manual", "update", "delete"]
+StackBindingValue = Literal[
+    "url",
+    "host",
+    "port",
+    "user",
+    "password",
+    "database",
+    "ssl.ca_path",
+    "ssl.cert_path",
+    "ssl.key_path",
+    "ssl.p12_path",
+    "ssl.pem_path",
+    "prisma_url",
+    "endpoint",
+    "bucket",
+    "region",
+    "prefix",
+    "access_key_id",
+    "secret_access_key",
+    "public_base_url",
+]
+
+
+class APIStackBlob(TypedDict):
+    prefix: str
+    visibility: TemplateBlobVisibility
+    used_bytes: int | None
+    api_key_id: str | None
+
+
+class APIStackMember(TypedDict):
+    resource_type: StackMemberType
+    resource_id: str
+    name: str
+    status: ApplicationStatus | DatabaseStatus | None
+    ram: int
+    service_key: str | None
+    database_type: int | None
+    closed: bool
+    blob: APIStackBlob | None
+
+
+class APIStackStatus(TypedDict):
+    up: int
+    down: int
+    building: int
+    total: int
+
+
+class APIStackBinding(TypedDict):
+    id: str
+    stack_id: str
+    app_id: str
+    database_id: str | None
+    blob_id: str | None
+    target_app_id: str | None
+    env_map: dict[str, StackBindingValue]
+    certs_path: str | None
+    created_at: str
+
+
+class APIStack(TypedDict):
+    id: str
+    name: str
+    description: str | None
+    network_mode: StackNetworkMode
+    owner_id: str
+    workspace_id: str | None
+    members: list[APIStackMember]
+    status: APIStackStatus
+    ram_total: int
+    bindings: list[APIStackBinding]
+    template: APITemplateOrigin | None
+    update_available: bool
+    created_at: str
+    updated_at: str
+
+
+class APIStackChange(APIStack, APIRestartRequired):
+    """An `APIStack` plus the apps that must restart to read the new variables or certificates."""
+
+
+class APIStackBindingChange(APIStackBinding, APIRestartRequired):
+    """An `APIStackBinding` plus the apps that must restart."""
+
+
+class APIStackConnectionSnippet(TypedDict):
+    language: ApplicationLanguage
+    driver: str
+    database_type: int | None
+    blob: bool
+    title: str
+    code: str
+    env_vars: list[str]
+
+
+class APIStackConnectionInfo(TypedDict):
+    app_id: str
+    language: ApplicationLanguage
+    snippets: list[APIStackConnectionSnippet]
+
+
+class APIStackSnapshotMember(TypedDict):
+    resource_type: Literal["application", "database"]
+    resource_id: str
+    snapshot_id: str
+
+
+class APIStackSnapshot(TypedDict):
+    id: str
+    stack_id: str
+    reason: StackSnapshotReason
+    date: str
+    size: str
+    members: list[APIStackSnapshotMember]
+    closed: bool
+
+
+class APIStackDatabaseAdded(APIRestartRequired):
+    stack: APIStack
+    database_id: str
+
+
+class APIStackBlobAdded(APIRestartRequired):
+    stack: APIStack
+    blob: APIStackMember
+
+
+class APIStackDeleteResult(TypedDict):
+    deleted_apps: list[str]
+    deleted_databases: list[str]
+    deleted_blob: bool
+
+
+class _StackBindingInputRequired(TypedDict):
+    app_id: str
+
+
+class StackBindingInput(_StackBindingInputRequired, total=False):
+    env_map: dict[str, StackBindingValue]
+
+
+class StackConnectionInput(StackBindingInput, total=False):
+    """A connection sent with a create or an add: `database_id` or `target_app_id` says what it connects to."""
+
+    database_id: str
+    target_app_id: str
+
+
+class StackMemberRef(TypedDict):
+    resource_type: Literal["application", "database"]
+    resource_id: str
+
+
+class _StackCreateBodyRequired(TypedDict):
+    name: str
+
+
+class StackCreateBody(_StackCreateBodyRequired, total=False):
+    description: str | None
+    network_mode: StackNetworkMode
+    members: list[StackMemberRef]
+    bindings: list[StackConnectionInput]
+    workspace_id: str
+
+
+class _StackTransformBodyRequired(TypedDict):
+    folder_id: str
+    inject_variables: bool
+
+
+class StackTransformBody(_StackTransformBodyRequired, total=False):
+    workspace_id: str
+    name: str
+    bindings: list[StackConnectionInput]
+
+
+class StackUpdateBody(TypedDict, total=False):
+    name: str
+    description: str | None
+
+
+class _StackDeleteBodyRequired(TypedDict):
+    mode: StackDeleteMode
+    confirm_name: str
+
+
+class StackDeleteBody(_StackDeleteBodyRequired, total=False):
+    # What to do with the files of the stack's Blob folder.
+    blob: StackBlobDisposition
+
+
+class _StackMemberAddBodyRequired(TypedDict):
+    resource_type: Literal["application", "database"]
+    resource_id: str
+
+
+class StackMemberAddBody(_StackMemberAddBodyRequired, total=False):
+    bindings: list[StackConnectionInput]
+
+
+class StackBindingCreateBody(StackBindingInput, total=False):
+    database_id: str
+    blob_id: str
+    target_app_id: str
+
+
+class _StackDatabaseBodyRequired(TypedDict):
+    type: int
+    name: str
+    ram: int
+
+
+class StackDatabaseBody(_StackDatabaseBodyRequired, total=False):
+    version: str
+    description: str | None
+    bindings: list[StackBindingInput]
+    # Name of the stack created when the app that receives the database is not in one yet.
+    stack_name: str
+
+
+class StackBlobBody(TypedDict, total=False):
+    prefix: str
+    visibility: TemplateBlobVisibility
+    bindings: list[StackBindingInput]
+
+
+class StackSnapshotRestoreBody(TypedDict, total=False):
+    restore_image_version: bool
+
+
+# -- API keys (listed by the dashboard; the SDK has no route for them, the types serve code that decodes them)
+
+
+class APIApiKeyManager(TypedDict):
+    """The stack the platform created an API key for. Such a key is revoked when the stack is dissolved or deleted."""
+
+    type: Literal["stack"]
+    id: str
+
+
+class _APIApiKeyRequired(TypedDict):
+    id: str
+    name: str
+    prefix: str
+    last4: str | None
+    scopes: list[str]
+    allowed_ips: list[str]
+    created_at: str
+    last_used_at: str | None
+
+
+class APIApiKey(_APIApiKeyRequired, total=False):
+    # Blob folder the key is restricted to (ends in `/`); `None` = the whole Blob. A restricted key only works with
+    # the `blob:*` scopes and is refused account-level Blob operations with `BLOB_PREFIX_DENIED`.
+    blob_prefix: str | None
+    # Set when the platform created the key for a stack (`API_KEY_MANAGED` on manual changes); `None` otherwise.
+    managed_by: APIApiKeyManager | None

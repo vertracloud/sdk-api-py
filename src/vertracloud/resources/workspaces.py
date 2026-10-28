@@ -1,4 +1,4 @@
-"""`workspaces` domain — 30 routes (scopes `workspaces:read/write/delete/invites`).
+"""`workspaces` domain — 34 routes (scopes `workspaces:read/write/delete/invites`).
 
 Creating an invite, transferring ownership, approving or rejecting an action request, and
 exporting activity stay dashboard-only and have no method here.
@@ -117,6 +117,55 @@ class WorkspaceDatabasesResource:
         )
 
 
+class WorkspaceTemplatesResource:
+    """`workspaces.templates.*` — move a private template to a workspace and back."""
+
+    def __init__(self, client: VertraClient) -> None:
+        self._c = client
+
+    def add(self, workspace_id: str, template_id: str) -> None:
+        """POST /v1/workspaces/:id/templates/:template_id — scope `workspaces:write`. Only the owner of the
+        workspace and of the template. Repeating it is not an error; a template already in another workspace
+        fails with 409.
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/workspaces/links/add-template
+        """
+        self._c.request_json(
+            "POST", f"/v1/workspaces/{encode_path_param(workspace_id)}/templates/{encode_path_param(template_id)}"
+        )
+
+    def remove(self, workspace_id: str, template_id: str) -> None:
+        """DELETE /v1/workspaces/:id/templates/:template_id — scope `workspaces:write`. Moves it back to your account.
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/workspaces/links/remove-template
+        """
+        self._c.request_json(
+            "DELETE", f"/v1/workspaces/{encode_path_param(workspace_id)}/templates/{encode_path_param(template_id)}"
+        )
+
+
+class WorkspaceStacksResource:
+    """`workspaces.stacks.*` — move a stack to a workspace and back."""
+
+    def __init__(self, client: VertraClient) -> None:
+        self._c = client
+
+    def add(self, workspace_id: str, stack_id: str) -> None:
+        """POST /v1/workspaces/:id/stacks/:stack_id — scope `workspaces:write`. Only the owner of the workspace and
+        of the stack.
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/workspaces/links/add-template
+        """
+        self._c.request_json(
+            "POST", f"/v1/workspaces/{encode_path_param(workspace_id)}/stacks/{encode_path_param(stack_id)}"
+        )
+
+    def remove(self, workspace_id: str, stack_id: str) -> None:
+        """DELETE /v1/workspaces/:id/stacks/:stack_id — scope `workspaces:write`. Moves it back to your account.
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/workspaces/links/remove-template
+        """
+        self._c.request_json(
+            "DELETE", f"/v1/workspaces/{encode_path_param(workspace_id)}/stacks/{encode_path_param(stack_id)}"
+        )
+
+
 class WorkspaceFoldersResource:
     def __init__(self, client: VertraClient) -> None:
         self._c = client
@@ -232,7 +281,7 @@ class WorkspaceActionRequestsResource:
 
 class WorkspacesResource:
     """`workspaces.*` — list/get/create/update/delete + `members`, `roles`, `invites`,
-    `action_requests`, `apps`, `databases`, `folders`, `favorites`."""
+    `action_requests`, `apps`, `databases`, `templates`, `stacks`, `folders`, `favorites`."""
 
     def __init__(self, client: VertraClient) -> None:
         self._c = client
@@ -242,6 +291,8 @@ class WorkspacesResource:
         self.action_requests = WorkspaceActionRequestsResource(client)
         self.apps = WorkspaceAppsResource(client)
         self.databases = WorkspaceDatabasesResource(client)
+        self.templates = WorkspaceTemplatesResource(client)
+        self.stacks = WorkspaceStacksResource(client)
         self.folders = WorkspaceFoldersResource(client)
         self.favorites = WorkspaceFavoritesResource(client)
 
