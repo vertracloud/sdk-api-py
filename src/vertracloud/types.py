@@ -1575,7 +1575,13 @@ class APITemplateOrigin(_APITemplateOriginRequired):
     """Where an app or a stack came from: the template, its version and whether it still follows it."""
 
 
-class APIApplicationTemplate(APITemplateOrigin):
+class _APIApplicationTemplateOptional(TypedDict, total=False):
+    # Deploy settings the template locks for this app ("zero_downtime", "auto_rollback"): updating the config to
+    # another value fails with TEMPLATE_SETTING_LOCKED. Empty once the app is detached.
+    locked_deploy_settings: list[Literal["zero_downtime", "auto_rollback"]]
+
+
+class APIApplicationTemplate(APITemplateOrigin, _APIApplicationTemplateOptional):
     """`APIApplication.template`: the origin plus the service this app is and what the user can do with it."""
 
     service_id: str | None
@@ -2230,6 +2236,7 @@ StackBindingValue = Literal[
     "access_key_id",
     "secret_access_key",
     "public_base_url",
+    "domain",
 ]
 
 
