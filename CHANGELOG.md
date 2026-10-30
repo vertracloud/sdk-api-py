@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.3](https://github.com/vertracloud/sdk-api-py/compare/v0.3.2...v0.3.3) (2026-10-30)
+
+
+### Features
+
+* add locked_deploy_settings to applications ([6294bc1](https://github.com/vertracloud/sdk-api-py/commit/6294bc11ae5e1471ef68c997dbf875c8efdd4a69))
+* add templates and stacks resources ([f638dde](https://github.com/vertracloud/sdk-api-py/commit/f638dde5c4df10070f5a0485fa5e3f1fafae02d1))
+
 ## [0.3.2](https://github.com/vertracloud/sdk-api-py/compare/v0.3.1...v0.3.2) (2026-10-25)
 
 
