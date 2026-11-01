@@ -58,10 +58,10 @@ def test_orders_quote_posts_the_body_and_returns_the_quote() -> None:
     }
     transport.queue_json({"response": quote})
     client = _client(transport)
-    assert client.billing.orders.quote({"plan": "starter-1", "months": 6, "coupon": "V3-X"}) == quote
+    assert client.billing.orders.quote({"plan": "starter-1", "months": 6, "coupon": "PROMO-X"}) == quote
     call = transport.calls[0]
     assert (call.method, call.path) == ("POST", "/v1/orders/quote")
-    assert json.loads(call.body or b"") == {"plan": "starter-1", "months": 6, "coupon": "V3-X"}
+    assert json.loads(call.body or b"") == {"plan": "starter-1", "months": 6, "coupon": "PROMO-X"}
     assert call.headers["Authorization"] == "Bearer secret-key"
     assert call.headers["Content-Type"] == "application/json"
 
