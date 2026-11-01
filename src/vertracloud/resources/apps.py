@@ -258,8 +258,8 @@ class AppNetworkResource:
     def publish(
         self, app_id: str, body: PublishAppBody | None = None, *, workspace_id: str | None = None
     ) -> APIApplicationWebPublish:
-        """POST /v1/apps/:id/network/publish — scope `apps:write`. The Pro plan gets a random
-        subdomain, Scale picks its own; an empty `{}` body is valid. `port` (only for an app on a
+        """POST /v1/apps/:id/network/publish — scope `apps:write`. Without `subdomain` the app
+        gets a random one; an empty `{}` body is valid. `port` (only for an app on a
         custom image) is the port the image listens on; it is required when the app has no web
         port yet."""
         return self._c.request_json(

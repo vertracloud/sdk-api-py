@@ -9,9 +9,7 @@ from vertracloud.types import (
     APIOrderQuote,
     APIPlansCatalog,
     BillingMonths,
-    LegacyPlanName,
-    UserPlanName,
-    V3PlanName,
+    PlanName,
 )
 
 from .fake_transport import FakeTransport
@@ -69,11 +67,9 @@ def test_orders_quote_posts_the_body_and_returns_the_quote() -> None:
     assert call.headers["Content-Type"] == "application/json"
 
 
-def test_plan_names_cover_both_grids() -> None:
-    v3 = set(get_args(V3PlanName))
-    legacy = set(get_args(LegacyPlanName))
-    assert len(get_args(V3PlanName)) == 22
-    assert {"starter-1", "starter-2", "pro-4", "business-24", "enterprise-512"} <= v3
-    assert {"economy", "pro", "scale", "intermediary", "enterprise-4", "enterprise-30"} <= legacy
-    assert set(get_args(UserPlanName)) == v3 | legacy
+def test_plan_names_are_the_22_current_plans() -> None:
+    names = set(get_args(PlanName))
+    assert len(get_args(PlanName)) == 22
+    assert {"starter-1", "starter-2", "pro-4", "business-24", "enterprise-32", "enterprise-512"} <= names
+    assert not {"economy", "pro", "scale", "intermediary", "enterprise-4", "enterprise-30"} & names
     assert get_args(BillingMonths) == (1, 3, 6, 12)

@@ -313,7 +313,7 @@ quote = client.billing.orders.quote({"plan": "starter-2", "months": 6, "coupon":
 print(quote["total"], quote["period_discount_percent"], quote["legacy_price"])
 ```
 
-`client.billing.orders.create` takes the same `plan` and `months`. Plan names of the previous grid (`economy`, `pro`, `scale`, `intermediary`, `enterprise-4` to `enterprise-30`) are still accepted while there are subscribers on them.
+`client.billing.orders.create` takes the same `plan` and `months`. `plan` is a `PlanName`: `starter-1`, `starter-2`, `pro-4`, `pro-6`, `pro-8`, `business-12`, `business-16`, `business-24` or `enterprise-32` up to `enterprise-512`.
 
 ### Errors
 

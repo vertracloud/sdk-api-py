@@ -11,8 +11,7 @@ from typing import Any, Literal, TypedDict
 
 PlanFamily = Literal["starter", "pro", "business", "enterprise"]
 
-# Current grid.
-V3PlanName = Literal[
+PlanName = Literal[
     "starter-1",
     "starter-2",
     "pro-4",
@@ -35,69 +34,6 @@ V3PlanName = Literal[
     "enterprise-384",
     "enterprise-448",
     "enterprise-512",
-]
-
-# Previous grid: accepted while there are subscribers, no longer sold.
-LegacyPlanName = Literal[
-    "economy",
-    "pro",
-    "scale",
-    "intermediary",
-    "enterprise-4",
-    "enterprise-6",
-    "enterprise-8",
-    "enterprise-12",
-    "enterprise-14",
-    "enterprise-16",
-    "enterprise-18",
-    "enterprise-20",
-    "enterprise-22",
-    "enterprise-24",
-    "enterprise-26",
-    "enterprise-28",
-    "enterprise-30",
-]
-
-UserPlanName = Literal[
-    "starter-1",
-    "starter-2",
-    "pro-4",
-    "pro-6",
-    "pro-8",
-    "business-12",
-    "business-16",
-    "business-24",
-    "enterprise-32",
-    "enterprise-48",
-    "enterprise-64",
-    "enterprise-96",
-    "enterprise-128",
-    "enterprise-160",
-    "enterprise-192",
-    "enterprise-224",
-    "enterprise-256",
-    "enterprise-288",
-    "enterprise-320",
-    "enterprise-384",
-    "enterprise-448",
-    "enterprise-512",
-    "economy",
-    "pro",
-    "scale",
-    "intermediary",
-    "enterprise-4",
-    "enterprise-6",
-    "enterprise-8",
-    "enterprise-12",
-    "enterprise-14",
-    "enterprise-16",
-    "enterprise-18",
-    "enterprise-20",
-    "enterprise-22",
-    "enterprise-24",
-    "enterprise-26",
-    "enterprise-28",
-    "enterprise-30",
 ]
 
 # Billing period in months.
@@ -374,7 +310,7 @@ class CreateOrderBody(TypedDict, total=False):
 
 
 class _QuoteOrderBodyRequired(TypedDict):
-    plan: UserPlanName
+    plan: PlanName
     months: BillingMonths  # 1, 3, 6 or 12
 
 
@@ -390,13 +326,13 @@ class APIOrderQuoteCoupon(TypedDict):
 class APIOrderQuote(TypedDict):
     """Price of a plan for a period. Amounts are in BRL."""
 
-    plan: UserPlanName
+    plan: PlanName
     months: BillingMonths
     list_price: float  # monthly list price times the months, before any discount
     period_discount_percent: float
     coupon: APIOrderQuoteCoupon | None
     total: float  # final price
-    legacy_price: bool  # the quote uses the price the account had before the current grid
+    legacy_price: bool  # the quote uses the price the account already had
     legacy_price_until: str | None  # ISO 8601; None when `legacy_price` is False
     payment_methods: list[Literal["pix", "card"]]
 
@@ -456,9 +392,9 @@ class APIPlanFeatures(TypedDict):
 
 
 class APIPlan(TypedDict):
-    name: UserPlanName
-    family: PlanFamily | None  # None for legacy plans
-    legacy: bool  # plan of the previous grid
+    name: PlanName
+    family: PlanFamily | None
+    legacy: bool  # plan no longer sold
     memory_mb: int
     max_vcpus_per_app: float  # highest vCPU count one application can use
     price: float  # monthly price, in BRL
@@ -585,7 +521,7 @@ class _APIApplicationRequired(TypedDict):
     type: int
     name: str
     owner_id: str
-    owner_plan: UserPlanName | None
+    owner_plan: PlanName | None
     language: ApplicationLanguage
     ram: int
     status: ApplicationStatus
@@ -848,7 +784,7 @@ class _APIDatabaseRequired(TypedDict):
     name: str
     description: str
     owner_id: str
-    owner_plan: UserPlanName | None
+    owner_plan: PlanName | None
     status: DatabaseStatus
     ram: int
     host: str
@@ -987,7 +923,7 @@ class APIUserPlanMemory(TypedDict):
 
 
 class APIUserPlan(TypedDict):
-    name: UserPlanName
+    name: PlanName
     expires_at: str
     duration: int
     memory: APIUserPlanMemory
@@ -1103,7 +1039,7 @@ class APIWorkspaceInfoResponse(APIWorkspace):
     databases: list[APIDatabase]
     permissions: list[str]
     is_owner: bool
-    owner_plan: UserPlanName | None
+    owner_plan: PlanName | None
     resource_organization: APIWorkspaceResourceOrganization
 
 
