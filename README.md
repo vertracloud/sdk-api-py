@@ -301,6 +301,20 @@ print(db["version"])  # major line, e.g. "18"
 
 Omit `version` to get the recommended one; with `snapshot_id`, omit it to keep the snapshot's line (an older one fails with `SNAPSHOT_VERSION_NEWER`, an unknown one with `INVALID_DATABASE_VERSION`). A database's version cannot be changed after creation; security updates are applied when it is stopped and started.
 
+### Plans and quotes
+
+```python
+# Public route: sent without the API key. The plans for sale, their limits and the billing periods (1, 3, 6 or 12 months).
+catalog = client.plans.list()
+print(catalog["grid"], catalog["cycles"], [f"{p['name']} R$ {p['price']}" for p in catalog["plans"]])
+
+# Price of a plan and period (scope `billing:read`), with an optional coupon, without creating an order. `total` is in BRL.
+quote = client.billing.orders.quote({"plan": "starter-2", "months": 6, "coupon": "MYCODE"})
+print(quote["total"], quote["period_discount_percent"], quote["legacy_price"])
+```
+
+`client.billing.orders.create` takes the same `plan` and `months`. Plan names of the previous grid (`economy`, `pro`, `scale`, `intermediary`, `enterprise-4` to `enterprise-30`) are still accepted while there are subscribers on them.
+
 ### Errors
 
 Every non-2xx response raises a `VertraAPIError` carrying the HTTP `status`, the API `code` (e.g. `APP_NOT_FOUND`) and `details`; `str(err)` includes the message. The API key is never part of the error, even when it is printed:
@@ -342,7 +356,8 @@ client = VertraClient(api_key="test", transport=my_fake_transport)
 | Snapshots | `client.snapshots` | 5 |
 | Account | `client.account` (+ `.sessions`, `.folders`, `.favorites`) | 10 |
 | Workspaces | `client.workspaces` (+ `.members`, `.roles`, `.invites`, `.action_requests`, `.apps`, `.databases`, `.templates`, `.stacks`, `.folders`, `.favorites`) | 34 |
-| Billing | `client.billing` (+ `.orders`) | 7 |
+| Billing | `client.billing` (+ `.orders`, with `orders.quote`) | 8 |
+| Plans | `client.plans` | 1 (public) |
 | Blob Storage | `client.blob` (+ `.shares`, `.rules`, `.domains`) | own host |
 
 Dashboard-only features (activity log, notifications, API key management, the database **Data** tab, plan downgrade, creating workspace invites, card payments, saved cards, automatic renewal, coupon preview, receipts and approving action requests) are not part of the public API. See [what an API key cannot do](https://docs.vertracloud.app/sdks).

@@ -9,7 +9,36 @@ from __future__ import annotations
 
 from typing import Any, Literal, TypedDict
 
-UserPlanName = Literal[
+PlanFamily = Literal["starter", "pro", "business", "enterprise"]
+
+# Current grid.
+V3PlanName = Literal[
+    "starter-1",
+    "starter-2",
+    "pro-4",
+    "pro-6",
+    "pro-8",
+    "business-12",
+    "business-16",
+    "business-24",
+    "enterprise-32",
+    "enterprise-48",
+    "enterprise-64",
+    "enterprise-96",
+    "enterprise-128",
+    "enterprise-160",
+    "enterprise-192",
+    "enterprise-224",
+    "enterprise-256",
+    "enterprise-288",
+    "enterprise-320",
+    "enterprise-384",
+    "enterprise-448",
+    "enterprise-512",
+]
+
+# Previous grid: accepted while there are subscribers, no longer sold.
+LegacyPlanName = Literal[
     "economy",
     "pro",
     "scale",
@@ -27,8 +56,52 @@ UserPlanName = Literal[
     "enterprise-26",
     "enterprise-28",
     "enterprise-30",
-    "enterprise-32",
 ]
+
+UserPlanName = Literal[
+    "starter-1",
+    "starter-2",
+    "pro-4",
+    "pro-6",
+    "pro-8",
+    "business-12",
+    "business-16",
+    "business-24",
+    "enterprise-32",
+    "enterprise-48",
+    "enterprise-64",
+    "enterprise-96",
+    "enterprise-128",
+    "enterprise-160",
+    "enterprise-192",
+    "enterprise-224",
+    "enterprise-256",
+    "enterprise-288",
+    "enterprise-320",
+    "enterprise-384",
+    "enterprise-448",
+    "enterprise-512",
+    "economy",
+    "pro",
+    "scale",
+    "intermediary",
+    "enterprise-4",
+    "enterprise-6",
+    "enterprise-8",
+    "enterprise-12",
+    "enterprise-14",
+    "enterprise-16",
+    "enterprise-18",
+    "enterprise-20",
+    "enterprise-22",
+    "enterprise-24",
+    "enterprise-26",
+    "enterprise-28",
+    "enterprise-30",
+]
+
+# Billing period in months.
+BillingMonths = Literal[1, 3, 6, 12]
 
 JsonValue = Any
 JsonObject = dict[str, Any]
@@ -294,10 +367,112 @@ OrderProvider = Literal["pix", "card", "redeem_code"]
 
 class CreateOrderBody(TypedDict, total=False):
     plan: str
-    months: int
+    months: BillingMonths  # 1, 3, 6 or 12
     coupon: str
     type: OrderType
     source: str
+
+
+class _QuoteOrderBodyRequired(TypedDict):
+    plan: UserPlanName
+    months: BillingMonths  # 1, 3, 6 or 12
+
+
+class QuoteOrderBody(_QuoteOrderBodyRequired, total=False):
+    coupon: str
+
+
+class APIOrderQuoteCoupon(TypedDict):
+    code: str
+    discount: float
+
+
+class APIOrderQuote(TypedDict):
+    """Price of a plan for a period. Amounts are in BRL."""
+
+    plan: UserPlanName
+    months: BillingMonths
+    list_price: float  # monthly list price times the months, before any discount
+    period_discount_percent: float
+    coupon: APIOrderQuoteCoupon | None
+    total: float  # final price
+    legacy_price: bool  # the quote uses the price the account had before the current grid
+    legacy_price_until: str | None  # ISO 8601; None when `legacy_price` is False
+    payment_methods: list[Literal["pix", "card"]]
+
+
+PlanGrid = Literal["legacy", "v3"]
+
+
+class APIPlanCycle(TypedDict):
+    months: BillingMonths
+    discount_percent: float
+
+
+class APIPlanBlobLimits(TypedDict):
+    quota_bytes: int
+    max_rules: int
+    max_custom_domains: int
+    image_transformations_per_month: int
+    s3_requests_per_10s: int
+
+
+class APIPlanLimits(TypedDict):
+    deploys_per_hour: int
+    requests_per_minute: int
+    requests_per_day: int
+    max_domains: int
+    max_domain_ports: int
+    manual_backups_per_day: int
+    workspace_members: int
+    workspace_roles: int
+    release_versions: int
+    release_retention_days: int
+    max_custom_images: int
+    blob: APIPlanBlobLimits
+
+
+class APIPlanFeatures(TypedDict):
+    web_published: bool
+    daily_backups: bool
+    create_backup: bool
+    advanced_metrics: bool
+    create_workspace: bool
+    custom_domain: bool
+    custom_subdomain: bool
+    file_manager: bool
+    database_manager: bool
+    auto_deploy: bool
+    rollback: bool
+    auto_rollback: bool
+    zero_downtime: bool
+    delete_snapshot: bool
+    powered_by_badge: bool
+    blob_metadata: bool
+    blob_share_password: bool
+    blob_unlimited_upload_rate: bool
+    blob_no_cache: bool
+    blob_short_expiration: bool
+
+
+class APIPlan(TypedDict):
+    name: UserPlanName
+    family: PlanFamily | None  # None for legacy plans
+    legacy: bool  # plan of the previous grid
+    memory_mb: int
+    max_vcpus_per_app: float  # highest vCPU count one application can use
+    price: float  # monthly price, in BRL
+    payment_methods: list[Literal["pix", "card"]]
+    limits: APIPlanLimits
+    features: APIPlanFeatures
+
+
+class APIPlansCatalog(TypedDict):
+    """The plans currently for sale and the billing periods with their discounts."""
+
+    grid: PlanGrid
+    cycles: list[APIPlanCycle]
+    plans: list[APIPlan]
 
 
 class APIBillingAddress(TypedDict):

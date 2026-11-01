@@ -1,4 +1,4 @@
-"""`billing` domain — 7 routes (scopes `billing:read/write`, `redeem:write`)."""
+"""`billing` domain — 8 routes (scopes `billing:read/write`, `redeem:write`)."""
 
 from __future__ import annotations
 
@@ -9,12 +9,14 @@ from ..types import (
     APIBillingDetails,
     APIOrderCreateResponse,
     APIOrderListItem,
+    APIOrderQuote,
     APIOrderStatus,
     APIPixPaymentResponse,
     APIRedeemResponse,
     CreateOrderBody,
     OrderProvider,
     PutBillingDetailsBody,
+    QuoteOrderBody,
 )
 
 if TYPE_CHECKING:
@@ -36,6 +38,11 @@ class BillingOrdersResource:
     def create(self, body: CreateOrderBody) -> APIOrderCreateResponse:
         """POST /v1/orders — scope `billing:write`."""
         return self._c.request_json("POST", "/v1/orders", json_body=body)
+
+    def quote(self, body: QuoteOrderBody) -> APIOrderQuote:
+        """POST /v1/orders/quote — scope `billing:read`. Prices a plan and period (`months`: 1, 3, 6 or 12),
+        with an optional coupon, without creating an order or using the coupon. `total` is what `create` charges."""
+        return self._c.request_json("POST", "/v1/orders/quote", json_body=body)
 
     def initiate_pix(self, order_id: str) -> APIPixPaymentResponse:
         """POST /v1/orders/:orderId/initiate/pix — scope `billing:write`."""

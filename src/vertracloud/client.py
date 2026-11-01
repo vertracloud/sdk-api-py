@@ -137,6 +137,7 @@ class VertraClient:
         from .resources.blob import BlobResource
         from .resources.databases import DatabasesResource
         from .resources.images import ImagesResource
+        from .resources.plans import PlansResource
         from .resources.snapshots import SnapshotsResource
         from .resources.stacks import StacksResource
         from .resources.templates import TemplatesResource
@@ -151,6 +152,7 @@ class VertraClient:
         self.account = AccountResource(self)
         self.workspaces = WorkspacesResource(self)
         self.billing = BillingResource(self)
+        self.plans = PlansResource(self)
         self.blob = BlobResource(self)
 
     def __repr__(self) -> str:
@@ -158,12 +160,13 @@ class VertraClient:
 
     # -- HTTP core -------------------------------------------------------
 
-    def _headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+    def _headers(self, extra: dict[str, str] | None = None, *, auth: bool = True) -> dict[str, str]:
         headers = {
-            "Authorization": f"Bearer {self._api_key}",
             "User-Agent": self.user_agent,
             "Accept": "application/json",
         }
+        if auth:
+            headers["Authorization"] = f"Bearer {self._api_key}"
         if extra:
             headers.update(extra)
         return headers
@@ -188,12 +191,13 @@ class VertraClient:
         timeout: float | None = None,
         base_url: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        auth: bool = True,
     ) -> JsonValue:
-        """Standard JSON call: sends `json_body` (if given), unwraps `{response}`."""
+        """Standard JSON call: sends `json_body` (if given), unwraps `{response}`. `auth=False` for public routes."""
         extra = dict(extra_headers or {})
         if json_body is not None:
             extra["Content-Type"] = "application/json"
-        headers = self._headers(extra)
+        headers = self._headers(extra, auth=auth)
         body = json.dumps(json_body).encode("utf-8") if json_body is not None else None
         resp = self.transport.request(method, self._url(path, query, base_url), headers, body, timeout or self.timeout)
         return self._unwrap(resp)
