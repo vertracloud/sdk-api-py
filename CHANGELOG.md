@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/vertracloud/sdk-api-py/compare/v0.3.3...v0.4.0) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* drop PlanGrid and the grid field of the plans catalog
+* replace UserPlanName with PlanName
+
+### Features
+
+* drop PlanGrid and the grid field of the plans catalog ([eab8c5e](https://github.com/vertracloud/sdk-api-py/commit/eab8c5e778b553d8ffa8f49255c349878940b054))
+* replace UserPlanName with PlanName ([49ff393](https://github.com/vertracloud/sdk-api-py/commit/49ff39316ee9812102ef47efe934548fca2fb19e))
+* support the new plans, plans listing and order quote ([f8bb0a2](https://github.com/vertracloud/sdk-api-py/commit/f8bb0a20f8d3f25ce6b2520caf947ab65848f88d))
+
 ## [0.3.3](https://github.com/vertracloud/sdk-api-py/compare/v0.3.2...v0.3.3) (2026-10-30)
 
 
