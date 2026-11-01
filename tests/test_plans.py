@@ -22,7 +22,6 @@ def _client(transport: FakeTransport) -> VertraClient:
 def test_plans_list_is_public_and_unwraps_the_envelope() -> None:
     transport = FakeTransport()
     catalog: APIPlansCatalog = {
-        "grid": "v3",
         "cycles": [{"months": 1, "discount_percent": 0}, {"months": 6, "discount_percent": 15}],
         "plans": [],
     }

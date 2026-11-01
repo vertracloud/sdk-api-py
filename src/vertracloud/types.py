@@ -337,9 +337,6 @@ class APIOrderQuote(TypedDict):
     payment_methods: list[Literal["pix", "card"]]
 
 
-PlanGrid = Literal["legacy", "v3"]
-
-
 class APIPlanCycle(TypedDict):
     months: BillingMonths
     discount_percent: float
@@ -406,7 +403,6 @@ class APIPlan(TypedDict):
 class APIPlansCatalog(TypedDict):
     """The plans currently for sale and the billing periods with their discounts."""
 
-    grid: PlanGrid
     cycles: list[APIPlanCycle]
     plans: list[APIPlan]
 

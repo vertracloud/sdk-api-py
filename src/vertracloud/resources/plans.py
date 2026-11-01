@@ -17,7 +17,7 @@ class PlansResource:
         self._c = client
 
     def list(self) -> APIPlansCatalog:
-        """GET /v1/plans — no authentication (sent without the API key). The plans currently for sale (`grid`), the
+        """GET /v1/plans — no authentication (sent without the API key). The plans currently for sale, the
         billing periods with their discounts (`cycles`: 1, 3, 6 or 12 months) and, per plan, price, memory, vCPU,
         limits and features."""
         return self._c.request_json("GET", "/v1/plans", auth=False)

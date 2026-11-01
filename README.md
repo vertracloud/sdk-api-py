@@ -306,7 +306,7 @@ Omit `version` to get the recommended one; with `snapshot_id`, omit it to keep t
 ```python
 # Public route: sent without the API key. The plans for sale, their limits and the billing periods (1, 3, 6 or 12 months).
 catalog = client.plans.list()
-print(catalog["grid"], catalog["cycles"], [f"{p['name']} R$ {p['price']}" for p in catalog["plans"]])
+print(catalog["cycles"], [f"{p['name']} R$ {p['price']}" for p in catalog["plans"]])
 
 # Price of a plan and period (scope `billing:read`), with an optional coupon, without creating an order. `total` is in BRL.
 quote = client.billing.orders.quote({"plan": "starter-2", "months": 6, "coupon": "MYCODE"})
