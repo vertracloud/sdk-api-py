@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/vertracloud/sdk-api-py/compare/v0.4.0...v0.4.1) (2026-11-03)
+
+
+### Features
+
+* add web analytics methods ([4985613](https://github.com/vertracloud/sdk-api-py/commit/4985613abd00f0e98041f5ea04344d862efc5367))
+
 ## [0.4.0](https://github.com/vertracloud/sdk-api-py/compare/v0.3.3...v0.4.0) (2026-11-01)
 
 
