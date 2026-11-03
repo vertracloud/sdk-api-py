@@ -1,4 +1,4 @@
-"""Error codes of the template and stack routes, as found in `VertraAPIError.code`.
+"""Error codes of the template, stack and web analytics routes, as found in `VertraAPIError.code`.
 
 Compare with the constants instead of retyping the strings::
 
@@ -63,3 +63,9 @@ STACK_BLOB_PREFIX_TAKEN = "STACK_BLOB_PREFIX_TAKEN"
 # -- API keys restricted to a Blob folder, or managed by the platform
 BLOB_PREFIX_DENIED = "BLOB_PREFIX_DENIED"
 API_KEY_MANAGED = "API_KEY_MANAGED"
+
+# -- web analytics
+PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_PERFORMANCE = "PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_PERFORMANCE"  # 403
+PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_REQUESTS = "PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_REQUESTS"  # 403
+ANALYTICS_RANGE_EXCEEDS_PLAN = "ANALYTICS_RANGE_EXCEEDS_PLAN"  # 400; `VertraAPIError.analytics_range`
+ANALYTICS_BUSY = "ANALYTICS_BUSY"  # 503; `VertraAPIError.analytics_retry_after`

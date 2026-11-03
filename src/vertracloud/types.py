@@ -362,6 +362,7 @@ class APIPlanLimits(TypedDict):
     release_versions: int
     release_retention_days: int
     max_custom_images: int
+    web_analytics_history_days: int  # how many days back Web Analytics can be read
     blob: APIPlanBlobLimits
 
 
@@ -386,6 +387,8 @@ class APIPlanFeatures(TypedDict):
     blob_unlimited_upload_rate: bool
     blob_no_cache: bool
     blob_short_expiration: bool
+    web_analytics_performance: bool  # `GET /v1/apps/:id/analytics/performance`
+    web_analytics_requests: bool  # `GET /v1/apps/:id/analytics/requests`
 
 
 class APIPlan(TypedDict):
@@ -2582,3 +2585,279 @@ class APIApiKey(_APIApiKeyRequired, total=False):
     blob_prefix: str | None
     # Set when the platform created the key for a stack (`API_KEY_MANAGED` on manual changes); `None` otherwise.
     managed_by: APIApiKeyManager | None
+
+
+# -- Web Analytics (`GET /v1/apps/:id/analytics*`) ---------------------------------------------
+
+# What the traffic can be broken down and filtered by: each value is a key of
+# `APIApplicationAnalyticsTraffic["breakdowns"]` and the name of a filter of the analytics routes.
+ApplicationAnalyticsDimension = Literal[
+    "country",
+    "edge_location",
+    "host",
+    "path",
+    "method",
+    "status",
+    "protocol",
+    "device",
+    "os",
+    "browser",
+    "referer",
+    "asn",
+    "ip",
+    "content_type",
+    "cache_status",
+    "bot",
+]
+
+# Value of a dimension for a request that has nothing for it; accepted as a filter value.
+ANALYTICS_NO_VALUE = "(none)"
+
+# Size of each point of a time series, chosen by the API from the length of the window.
+ApplicationAnalyticsInterval = Literal["1m", "5m", "15m", "1h"]
+
+# Class of HTTP status accepted by the `status` filter.
+ApplicationAnalyticsStatusClass = Literal["2xx", "3xx", "4xx", "5xx"]
+
+# Order of the request log by time.
+ApplicationAnalyticsOrder = Literal["asc", "desc"]
+
+
+class AnalyticsFilters(TypedDict, total=False):
+    """Filters of the analytics routes, one per dimension; all of them together narrow every part of the answer.
+    Each takes one value, as found in a breakdown entry or a request of the log (`ANALYTICS_NO_VALUE` for requests
+    with no value). `path` is a prefix and `status` also takes a class (`5xx`)."""
+
+    country: str
+    edge_location: str
+    host: str
+    path: str
+    method: str
+    status: str
+    protocol: str
+    device: str
+    os: str
+    browser: str
+    referer: str
+    asn: str
+    ip: str
+    content_type: str
+    cache_status: str
+    bot: str
+
+
+class APIApplicationAnalyticsMeta(TypedDict):
+    """Fields every analytics answer carries. An app with no site published answers `web_published: False`."""
+
+    start: str  # start of the window actually read (ISO 8601); may be rounded
+    end: str
+    hosts: list[str]  # hostnames of the app that were read
+    web_published: bool
+    sampled: bool  # numbers estimated from a sample (and the request log is a sample)
+    stale: bool  # `True` when the latest data could not be read and this is an earlier answer; see `generated_at`
+    generated_at: str
+    history_days: int  # how many days back the plan of the app's owner can read
+
+
+class APIApplicationAnalyticsSeriesMeta(APIApplicationAnalyticsMeta):
+    interval: ApplicationAnalyticsInterval
+
+
+class APIApplicationAnalyticsBreakdownEntry(TypedDict):
+    """One entry of a breakdown, ordered by `requests` (highest first)."""
+
+    value: str  # send it as the filter of the same name; `(none)` = the request had no value
+    label: str | None  # readable name when `value` is a code (an `asn` network name)
+    requests: int
+    visits: int
+    bytes: int
+
+
+class APIApplicationAnalyticsTrafficSummary(TypedDict):
+    requests: int
+    visits: int
+    bytes: int
+    errors_4xx: int
+    errors_5xx: int
+    error_rate_4xx: float  # 0 to 1
+    error_rate_5xx: float
+    edge_time_p95_ms: float
+
+
+class APIApplicationAnalyticsTrafficPoint(TypedDict):
+    time: str  # start of the point
+    requests: int
+    visits: int
+    bytes: int
+    errors_4xx: int
+    errors_5xx: int
+
+
+class APIApplicationAnalyticsTrafficPeriod(TypedDict):
+    """The previous period (same length, right before the window), sent when `compare=True`."""
+
+    start: str
+    end: str
+    summary: APIApplicationAnalyticsTrafficSummary | None
+    series: list[APIApplicationAnalyticsTrafficPoint]
+
+
+class APIApplicationAnalyticsTraffic(APIApplicationAnalyticsSeriesMeta):
+    """`GET /v1/apps/:id/analytics`."""
+
+    summary: APIApplicationAnalyticsTrafficSummary | None  # `None` when there was no request
+    series: list[APIApplicationAnalyticsTrafficPoint]
+    previous: APIApplicationAnalyticsTrafficPeriod | None  # `None` unless `compare=True`
+    # Top entries per dimension: only the dimensions asked for in `breakdowns`, or all when omitted.
+    breakdowns: dict[ApplicationAnalyticsDimension, list[APIApplicationAnalyticsBreakdownEntry]]
+
+
+class APIApplicationAnalyticsErrorsSummary(TypedDict):
+    requests: int
+    errors: int  # `errors_5xx`, plus `errors_4xx` with `include_4xx=True`
+    error_rate: float  # 0 to 1
+    errors_4xx: int
+    errors_5xx: int
+
+
+class APIApplicationAnalyticsErrorsPoint(TypedDict):
+    time: str
+    requests: int
+    errors_4xx: int
+    errors_5xx: int
+
+
+class APIApplicationAnalyticsErrorsPeriod(TypedDict):
+    start: str
+    end: str
+    summary: APIApplicationAnalyticsErrorsSummary | None
+    series: list[APIApplicationAnalyticsErrorsPoint]
+
+
+class APIApplicationAnalyticsErrorEntry(TypedDict):
+    value: str
+    requests: int
+    errors: int
+    error_rate: float
+
+
+class APIApplicationAnalyticsErrors(APIApplicationAnalyticsSeriesMeta):
+    """`GET /v1/apps/:id/analytics/errors`."""
+
+    include_4xx: bool
+    summary: APIApplicationAnalyticsErrorsSummary | None
+    series: list[APIApplicationAnalyticsErrorsPoint]
+    previous: APIApplicationAnalyticsErrorsPeriod | None
+    paths: list[APIApplicationAnalyticsErrorEntry]  # highest `errors` first; `value` is the path
+    statuses: list[APIApplicationAnalyticsBreakdownEntry]  # `value` is the status, such as `502`
+
+
+class APIApplicationAnalyticsLatency(TypedDict):
+    avg_ms: float
+    p50_ms: float
+    p75_ms: float
+    p90_ms: float
+    p95_ms: float
+    p99_ms: float
+    p999_ms: float  # 99.9th percentile
+
+
+class APIApplicationAnalyticsLatencyBrief(TypedDict):
+    avg_ms: float
+    p50_ms: float
+    p95_ms: float
+    p99_ms: float
+
+
+class APIApplicationAnalyticsPerformanceSummary(TypedDict):
+    requests: int
+    edge: APIApplicationAnalyticsLatency  # the whole time the visitor waited for the first byte
+    # The part your app took; `None` when the request did not reach the app.
+    container: APIApplicationAnalyticsLatency | None
+
+
+class APIApplicationAnalyticsPerformancePoint(TypedDict):
+    time: str
+    requests: int
+    edge: APIApplicationAnalyticsLatencyBrief
+    container: APIApplicationAnalyticsLatencyBrief | None
+
+
+class APIApplicationAnalyticsPerformancePeriod(TypedDict):
+    start: str
+    end: str
+    summary: APIApplicationAnalyticsPerformanceSummary | None
+    series: list[APIApplicationAnalyticsPerformancePoint]
+
+
+class APIApplicationAnalyticsLatencyEntry(TypedDict):
+    value: str
+    label: str | None
+    requests: int
+    edge: APIApplicationAnalyticsLatencyBrief
+    container: APIApplicationAnalyticsLatencyBrief | None
+
+
+class APIApplicationAnalyticsPathIssue(TypedDict):
+    path: str
+    requests: int
+    errors: int  # 5xx
+    error_rate: float
+    avg_ms: float  # average edge time
+    p99_ms: float
+
+
+class APIApplicationAnalyticsPerformance(APIApplicationAnalyticsSeriesMeta):
+    """`GET /v1/apps/:id/analytics/performance`. Needs a plan with `features.web_analytics_performance`."""
+
+    summary: APIApplicationAnalyticsPerformanceSummary | None
+    series: list[APIApplicationAnalyticsPerformancePoint]
+    previous: APIApplicationAnalyticsPerformancePeriod | None
+    countries: list[APIApplicationAnalyticsLatencyEntry]
+    edge_locations: list[APIApplicationAnalyticsLatencyEntry]
+    slow_paths: list[APIApplicationAnalyticsLatencyEntry]  # slowest first, by the edge p95
+    path_issues: list[APIApplicationAnalyticsPathIssue]  # most requested first
+
+
+class APIApplicationAnalyticsRequest(TypedDict):
+    """One request of the log. Fields named after a dimension hold the same value as that dimension."""
+
+    time: str
+    request_id: str  # request identifier
+    host: str
+    path: str
+    query: str  # without the leading `?`; empty when none
+    method: str
+    protocol: str
+    status: int
+    container_status: int | None  # `None` when the request did not reach the app
+    edge_time_ms: float
+    container_time_ms: float | None
+    ip: str
+    asn: int
+    asn_name: str
+    country: str
+    edge_location: str
+    referer: str  # `(none)` = direct visit
+    referer_url: str | None
+    device: str
+    os: str
+    browser: str
+    bot: str
+    content_type: str
+    cache_status: str
+
+
+class APIApplicationAnalyticsRequestList(APIApplicationAnalyticsMeta):
+    """`GET /v1/apps/:id/analytics/requests`. Needs a plan with `features.web_analytics_requests`."""
+
+    order: ApplicationAnalyticsOrder
+    requests: list[APIApplicationAnalyticsRequest]
+    cursor: str | None  # pass back as `cursor` for the next page; `None` = last page
+
+
+class APIApplicationAnalyticsRangeExceedsPlanDetails(TypedDict):
+    """`details` of `ANALYTICS_RANGE_EXCEEDS_PLAN`."""
+
+    history_days: int
+    earliest: str  # earliest `start` accepted right now (ISO 8601)

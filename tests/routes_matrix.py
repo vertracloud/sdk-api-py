@@ -1,9 +1,13 @@
-"""Local fixture with the 178 routes from the API key catalog, and the list of forbidden
+"""Local fixture with the 182 routes from the API key catalog, and the list of forbidden
 paths. `tests/test_routes_matrix.py` proves exact coverage and exclusion."""
 
 from __future__ import annotations
 
 FROZEN_ROUTES: list[tuple[str, str]] = [
+    ("GET", "/v1/apps/:id/analytics"),
+    ("GET", "/v1/apps/:id/analytics/errors"),
+    ("GET", "/v1/apps/:id/analytics/performance"),
+    ("GET", "/v1/apps/:id/analytics/requests"),
     ("GET", "/v1/apps/:id/domains"),
     ("GET", "/v1/apps/:id/domains/:domain_id/dns"),
     ("PATCH", "/v1/apps/:id/domains/:domain_id"),
@@ -185,7 +189,7 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("POST", "/v1/workspaces/:id/templates/:template_id"),
 ]
 
-assert len(FROZEN_ROUTES) == 178, f"expected 178 frozen routes, found {len(FROZEN_ROUTES)}"
+assert len(FROZEN_ROUTES) == 182, f"expected 182 frozen routes, found {len(FROZEN_ROUTES)}"
 
 # Forbidden paths: none of these may appear, in any form, in `src/vertracloud/**`.
 FORBIDDEN_PATHS: list[str] = [

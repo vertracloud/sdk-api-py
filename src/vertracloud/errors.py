@@ -80,6 +80,19 @@ class VertraAPIError(Exception):
         action = details.get("action") if details else None
         return action if isinstance(action, str) else None
 
+    @property
+    def analytics_range(self) -> dict[str, Any] | None:
+        """`details` of an `ANALYTICS_RANGE_EXCEEDS_PLAN` error (`{history_days, earliest}`): how many days back the
+        plan reads and the earliest `start` accepted right now. `None` for any other error."""
+        return self._details_for("ANALYTICS_RANGE_EXCEEDS_PLAN")
+
+    @property
+    def analytics_retry_after(self) -> int | float | None:
+        """Seconds to wait after an `ANALYTICS_BUSY` error (503); `None` for any other error."""
+        details = self._details_for("ANALYTICS_BUSY")
+        value = details.get("retry_after") if details else None
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
 
 class AuthenticationError(VertraAPIError):
     """401 — invalid key or user not found (`API_KEY_INVALID`, `USER_NOT_FOUND`)."""

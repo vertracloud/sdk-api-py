@@ -129,6 +129,30 @@ client.apps.update_config(app_id, {"deploy": {"health_check_path": None}})  # cl
 
 `client.apps.files.upload(..., message="...")` sets the message shown in the release history.
 
+### Web Analytics
+
+Traffic, errors, performance and the request log of an app's site (scope `apps:read`). Every call takes a window (`start`, `end`, ISO 8601; at most 30 days, within the plan's `limits.web_analytics_history_days`) and one keyword per dimension to filter by (`country`, `edge_location`, `host`, `path` as a prefix, `method`, `status` or a class such as `5xx`, `protocol`, `device`, `os`, `browser`, `referer`, `asn`, `ip`, `content_type`, `cache_status`, `bot`). A `value` of a breakdown entry can be sent back as the filter unchanged; `"(none)"` filters the requests that had no value.
+
+```python
+traffic = client.apps.analytics.traffic(
+    app_id, start="2026-11-02T00:00:00Z", compare=True, breakdowns=["country", "path"], country="BR"
+)
+print(traffic["summary"], traffic["breakdowns"]["path"][0])
+
+# Compare with a chosen period (same length as the window; implies compare=True).
+week_before = client.apps.analytics.errors(app_id, start="2026-11-02T00:00:00Z", compare_start="2026-10-26T00:00:00Z")
+
+errors = client.apps.analytics.errors(app_id, include_4xx=True)
+perf = client.apps.analytics.performance(app_id)  # plans with web_analytics_performance
+# Plans with web_analytics_requests.
+page = client.apps.analytics.requests(app_id, status="5xx", order="desc", limit=100)
+
+for request in client.apps.analytics.iter_requests(app_id, path="/api"):  # follows the cursor
+    print(request["request_id"], request["status"], request["edge_time_ms"])
+```
+
+An app with no site published answers `web_published: False` and empty data. `PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_PERFORMANCE` and `PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_REQUESTS` (403) mean the plan does not include that route; `compare_start` (traffic, errors and performance, ISO 8601) compares with the period of the same length that starts there instead of the one right before the window, and shows it in `previous.start`/`previous.end`; a period that ends after the window starts is `INVALID_RANGE` (400). `ANALYTICS_RANGE_EXCEEDS_PLAN` (400) carries `error.analytics_range` (`history_days`, `earliest`) and `ANALYTICS_BUSY` (503) carries `error.analytics_retry_after`.
+
 ### Uploading and downloading
 
 Uploads take `bytes`; downloads return `bytes`.
@@ -348,7 +372,7 @@ client = VertraClient(api_key="test", transport=my_fake_transport)
 
 | Domain | Resource | Routes |
 |---|---|---|
-| Apps | `client.apps` (+ `.deploys`, `.releases`, `.domains`, `.network`, `.envs`, `.files`) | 43 |
+| Apps | `client.apps` (+ `.deploys`, `.releases`, `.domains`, `.network`, `.envs`, `.files`, `.analytics`) | 47 |
 | Databases | `client.databases` (+ `.credentials`) | 14 |
 | Custom images | `client.images` | 12 |
 | Templates | `client.templates` (+ `.deploys`, `.share_links`, `.share`, `.updates`) | 32 |

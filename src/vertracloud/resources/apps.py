@@ -1,4 +1,4 @@
-"""`apps` domain — 43 routes (scopes `apps:read/write/delete/envs/files`).
+"""`apps` domain — 47 routes (scopes `apps:read/write/delete/envs/files`).
 
 `workspace_id` is accepted as an optional query parameter on almost every method.
 """
@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator, Sequence
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from ..client import LARGE_PAYLOAD_TIMEOUT, MultipartField, encode_path_param
@@ -13,8 +15,14 @@ from ..errors import AppBuildFailedError, WaitTimeoutError
 from ..sse import SseStream
 from ..types import (
     AddDomainBody,
+    AnalyticsFilters,
     APIAppFileUploadResponse,
     APIApplication,
+    APIApplicationAnalyticsErrors,
+    APIApplicationAnalyticsPerformance,
+    APIApplicationAnalyticsRequest,
+    APIApplicationAnalyticsRequestList,
+    APIApplicationAnalyticsTraffic,
     APIApplicationCreated,
     APIApplicationDeployment,
     APIApplicationDomain,
@@ -35,6 +43,7 @@ from ..types import (
     APIRuntimesResponse,
     APISubdomainResponse,
     APIWebhookUrl,
+    ApplicationAnalyticsDimension,
     CreateAppBody,
     CreateAppFromImageBody,
     CreateWebhookBody,
@@ -51,6 +60,8 @@ from ..types import (
 )
 
 if TYPE_CHECKING:
+    from typing_extensions import Unpack
+
     from ..client import VertraClient
 
 # Aliases so `list[...]` doesn't resolve to the `list` method inside the class itself.
@@ -58,6 +69,163 @@ EnvList = list[APIApplicationEnvironment]
 FileTreeList = list[APIApplicationFileTree]
 DomainList = list[APIApplicationDomain]
 DomainDnsList = list[APIApplicationDomainDnsRecord]
+
+
+class AppAnalyticsResource:
+    """Web Analytics of the app's site (scope `apps:read`). Every method takes the window (`start`, `end`, ISO 8601,
+    at most 30 days and within the plan's `limits.web_analytics_history_days`) and the filters of the dimensions
+    (`country="BR"`, `path="/api"`, `status="5xx"`, ...). An app with no site published answers `web_published: False`
+    and empty data. Errors: 400 `ANALYTICS_RANGE_EXCEEDS_PLAN` (`error.analytics_range`), 503 `ANALYTICS_BUSY`
+    (`error.analytics_retry_after`). `compare_start` (traffic, errors, performance) picks the compared period; 400
+    `INVALID_RANGE` if it ends after the window starts."""
+
+    def __init__(self, client: VertraClient) -> None:
+        self._c = client
+
+    def _get(self, app_id: str, suffix: str, query: dict[str, Any]) -> Any:
+        return self._c.request_json("GET", f"/v1/apps/{encode_path_param(app_id)}/analytics{suffix}", query=query)
+
+    def traffic(
+        self,
+        app_id: str,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        compare: bool | None = None,
+        compare_start: str | None = None,
+        breakdowns: str | Sequence[ApplicationAnalyticsDimension] | None = None,
+        limit: int | None = None,
+        workspace_id: str | None = None,
+        **filters: Unpack[AnalyticsFilters],
+    ) -> APIApplicationAnalyticsTraffic:
+        """GET /v1/apps/:id/analytics — scope `apps:read`. Summary, series, previous period (`compare=True`) and
+        breakdowns, with every filter applied to every part. `breakdowns` is a list/tuple of dimensions or a
+        comma-separated string (default: all; an empty list or string = none); `limit` is the entries per breakdown,
+        1-25 (default 10). `compare_start` (ISO 8601) compares with the period of the same length starting there,
+        instead of the one right before the window; it implies `compare=True`, and `previous.start`/`previous.end`
+        show it.
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/analytics/traffic
+        """
+        joined = breakdowns if breakdowns is None or isinstance(breakdowns, str) else ",".join(breakdowns)
+        query = {
+            **filters,
+            "start": start,
+            "end": end,
+            "compare": compare,
+            "compare_start": compare_start,
+            "breakdowns": joined,
+            "limit": limit,
+        }
+        return self._get(app_id, "", {**query, "workspace_id": workspace_id})
+
+    def errors(
+        self,
+        app_id: str,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        compare: bool | None = None,
+        compare_start: str | None = None,
+        include_4xx: bool | None = None,
+        limit: int | None = None,
+        workspace_id: str | None = None,
+        **filters: Unpack[AnalyticsFilters],
+    ) -> APIApplicationAnalyticsErrors:
+        """GET /v1/apps/:id/analytics/errors — scope `apps:read`. 5xx errors, and 4xx with `include_4xx=True`.
+        `limit` is the entries in `paths` and `statuses`, 1-25 (default 10).
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/analytics/errors
+        """
+        query = {
+            **filters,
+            "start": start,
+            "end": end,
+            "compare": compare,
+            "compare_start": compare_start,
+            "include_4xx": include_4xx,
+            "limit": limit,
+        }
+        return self._get(app_id, "/errors", {**query, "workspace_id": workspace_id})
+
+    def performance(
+        self,
+        app_id: str,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        compare: bool | None = None,
+        compare_start: str | None = None,
+        limit: int | None = None,
+        workspace_id: str | None = None,
+        **filters: Unpack[AnalyticsFilters],
+    ) -> APIApplicationAnalyticsPerformance:
+        """GET /v1/apps/:id/analytics/performance — scope `apps:read`. Edge and container times. 403
+        `PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_PERFORMANCE` when the plan does not include it. `limit` is the entries
+        in `countries`, `edge_locations`, `slow_paths` and `path_issues`, 1-25 (default 10).
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/analytics/performance
+        """
+        query = {
+            **filters,
+            "start": start,
+            "end": end,
+            "compare": compare,
+            "compare_start": compare_start,
+            "limit": limit,
+        }
+        return self._get(app_id, "/performance", {**query, "workspace_id": workspace_id})
+
+    def requests(
+        self,
+        app_id: str,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        cursor: str | None = None,
+        order: str | None = None,
+        limit: int | None = None,
+        workspace_id: str | None = None,
+        **filters: Unpack[AnalyticsFilters],
+    ) -> APIApplicationAnalyticsRequestList:
+        """GET /v1/apps/:id/analytics/requests — scope `apps:read`. One page of the request log: send the answer's
+        `cursor` back as `cursor` with the same window, filters and order (`None` = last page). `order` is `asc` or
+        `desc` (default); `limit` is 1-100 (default 50). 403 `PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_REQUESTS` when the
+        plan does not include it. To walk every page use `iter_requests`.
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/analytics/requests
+        """
+        query = {**filters, "start": start, "end": end, "cursor": cursor, "order": order, "limit": limit}
+        return self._get(app_id, "/requests", {**query, "workspace_id": workspace_id})
+
+    def iter_requests(
+        self,
+        app_id: str,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        cursor: str | None = None,
+        order: str | None = None,
+        limit: int | None = None,
+        workspace_id: str | None = None,
+        **filters: Unpack[AnalyticsFilters],
+    ) -> Iterator[APIApplicationAnalyticsRequest]:
+        """Walks the request log page after page, yielding each request. Pins the window (`end` defaults to now and
+        `start` to 24 hours before it, resolved once) so every page reads the same one."""
+        end_dt = datetime.fromisoformat(end.replace("Z", "+00:00")) if end else datetime.now(timezone.utc)
+        end = end or end_dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        start = start or (end_dt - timedelta(hours=24)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        while True:
+            page = self.requests(
+                app_id,
+                start=start,
+                end=end,
+                cursor=cursor,
+                order=order,
+                limit=limit,
+                workspace_id=workspace_id,
+                **filters,
+            )
+            yield from page["requests"]
+            cursor = page["cursor"]
+            if not cursor:
+                return
 
 
 class AppDeploysWebhookResource:
@@ -417,7 +585,7 @@ class AppFilesResource:
 
 class AppsResource:
     """`apps.*` — get/status/statusAll/runtimes/realtime/metrics/logs/download/create/start/
-    stop/restart/updateConfig/delete + `deploys`, `releases`, `domains`, `network`, `envs`, `files`."""
+    stop/restart/updateConfig/delete + `deploys`, `releases`, `domains`, `network`, `envs`, `files`, `analytics`."""
 
     def __init__(self, client: VertraClient) -> None:
         self._c = client
@@ -427,6 +595,7 @@ class AppsResource:
         self.network = AppNetworkResource(client)
         self.envs = AppEnvsResource(client)
         self.files = AppFilesResource(client)
+        self.analytics = AppAnalyticsResource(client)
 
     def get(self, app_id: str, *, workspace_id: str | None = None) -> APIApplication:
         """GET /v1/apps/:id — scope `apps:read`.
