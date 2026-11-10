@@ -159,6 +159,21 @@ class ImagesResource:
             timeout=timeout if timeout is not None else LARGE_PAYLOAD_TIMEOUT,
         )
 
+    def rebuild_from_source(self, image_id: str, *, workspace_id: str | None = None) -> APICustomImage:
+        """POST /v1/images/:image_id/rebuild — scope `images:write`. No body. Builds the image again
+        without uploading anything: an image linked to GitHub uses the tip of the linked branch, any
+        other uses the build context of the latest build, including a failed one (so it also repeats a
+        build that failed). Counts toward the hourly deploy limit. Replies 202 with `status: "building"`;
+        the apps keep running the current version until they are restarted or deployed. Refused with
+        `IMAGE_BUILD_IN_PROGRESS` while a build runs.
+        Doc: https://docs.vertracloud.app/api-reference/endpoint/images/rebuild-source
+        """
+        return self._c.request_json(
+            "POST",
+            f"/v1/images/{encode_path_param(image_id)}/rebuild",
+            query={"workspace_id": workspace_id},
+        )
+
     def delete(
         self, image_id: str, *, confirm_name: str, workspace_id: str | None = None
     ) -> APICustomImageDeleteResult:

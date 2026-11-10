@@ -261,7 +261,7 @@ client.images.update(image["id"], {"name": "meu-projeto-base", "description": "B
 client.images.update(image["id"], {"description": None})
 ```
 
-`images.logs` returns an iterator with `close()`, like `apps.realtime`. `rebuild(image_id, file=...)` replaces the whole build context; it never restarts the apps that run the image. `link_github` and `unlink_github` change the GitHub link, and `versions` lists the successful builds, newest first.
+`images.logs` returns an iterator with `close()`, like `apps.realtime`. `rebuild(image_id, file=...)` replaces the whole build context; it never restarts the apps that run the image. `rebuild_from_source(image_id)` builds again without uploading anything: an image linked to GitHub uses the tip of the linked branch, any other uses the build context of the latest build, including a failed one; it counts toward the hourly deploy limit. `link_github` and `unlink_github` change the GitHub link, and `versions` lists the successful builds, newest first.
 
 `delete` removes the image and **every app created from it**. The name must be typed back as `confirm_name`:
 
@@ -374,7 +374,7 @@ client = VertraClient(api_key="test", transport=my_fake_transport)
 |---|---|---|
 | Apps | `client.apps` (+ `.deploys`, `.releases`, `.domains`, `.network`, `.envs`, `.files`, `.analytics`) | 47 |
 | Databases | `client.databases` (+ `.credentials`) | 14 |
-| Custom images | `client.images` | 12 |
+| Custom images | `client.images` | 13 |
 | Templates | `client.templates` (+ `.deploys`, `.share_links`, `.share`, `.updates`) | 32 |
 | Stacks | `client.stacks` (+ `.members`, `.bindings`, `.snapshots`) | 20 |
 | Snapshots | `client.snapshots` | 5 |

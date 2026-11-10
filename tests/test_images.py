@@ -185,6 +185,18 @@ def test_rebuild_is_put_multipart_with_only_the_file_part() -> None:
     assert call.timeout == 120.0
 
 
+# -- rebuild_from_source: POST with no body ---------------------------------------------------
+
+
+def test_rebuild_from_source_is_a_bodyless_post() -> None:
+    client, transport = _client()
+    client.images.rebuild_from_source(ID)
+    call = transport.calls[0]
+    assert call.method == "POST"
+    assert call.path == f"/v1/images/{ID}/rebuild"
+    assert call.body is None
+
+
 # -- description on create, update (PATCH) ----------------------------------------------------
 
 
@@ -418,6 +430,12 @@ WORKSPACE_ACTS: list[tuple[str, str, str, Callable[[VertraClient, str | None], o
     ("get", "GET", f"/v1/images/{ID}", lambda c, ws: c.images.get(ID, workspace_id=ws)),
     ("update", "PATCH", f"/v1/images/{ID}", lambda c, ws: c.images.update(ID, {"name": "novo"}, workspace_id=ws)),
     ("rebuild", "PUT", f"/v1/images/{ID}", lambda c, ws: c.images.rebuild(ID, file=ZIP, workspace_id=ws)),
+    (
+        "rebuild_from_source",
+        "POST",
+        f"/v1/images/{ID}/rebuild",
+        lambda c, ws: c.images.rebuild_from_source(ID, workspace_id=ws),
+    ),
     (
         "delete",
         "DELETE",

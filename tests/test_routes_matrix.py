@@ -152,6 +152,7 @@ def _drive_all_calls(client: VertraClient, transport: FakeTransport) -> None:
     images.get(ID)
     images.update(ID, {"name": "img2"})
     images.rebuild(ID, file=b"zip-bytes")
+    images.rebuild_from_source(ID)
     images.delete(ID, confirm_name="img")
     images.versions(ID)
     transport.queue_stream([b"event: log\n", b"data: step\n", b"\n"])
