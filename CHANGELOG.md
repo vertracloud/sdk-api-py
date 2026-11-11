@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/vertracloud/sdk-api-py/compare/v0.4.1...v0.4.2) (2026-11-11)
+
+
+### Features
+
+* **images:** rebuild an image from its current source ([8d60642](https://github.com/vertracloud/sdk-api-py/commit/8d6064266563d78d7ce3e66c8ab2c8e4dc20ea8e))
+
 ## [0.4.1](https://github.com/vertracloud/sdk-api-py/compare/v0.4.0...v0.4.1) (2026-11-03)
 
 
