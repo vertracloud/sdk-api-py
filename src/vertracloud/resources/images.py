@@ -164,7 +164,8 @@ class ImagesResource:
         without uploading anything: an image linked to GitHub uses the tip of the linked branch, any
         other uses the build context of the latest build, including a failed one (so it also repeats a
         build that failed). Counts toward the hourly deploy limit. Replies 202 with `status: "building"`;
-        the apps keep running the current version until they are restarted or deployed. Refused with
+        the apps keep running the current version until they are restarted or deployed, unless the
+        image has `auto_update_apps` on (then a successful build restarts them). Refused with
         `IMAGE_BUILD_IN_PROGRESS` while a build runs.
         Doc: https://docs.vertracloud.app/api-reference/endpoint/images/rebuild-source
         """
