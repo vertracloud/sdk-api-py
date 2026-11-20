@@ -9,7 +9,9 @@ from ..types import (
     APIDatabase,
     APIDatabaseCertificate,
     APIDatabaseCertificateReset,
+    APIDatabaseCreated,
     APIDatabasePasswordReset,
+    APIDatabaseReset,
     APIDatabaseStatus,
     APIDatabaseStatusShort,
     APIDatabaseVersions,
@@ -104,9 +106,13 @@ class DatabasesResource:
             "GET", f"/v1/databases/{encode_path_param(db_id)}/metrics", query={"workspace_id": workspace_id}
         )
 
-    def create(self, body: CreateDatabaseBody) -> APIDatabase:
+    def create(self, body: CreateDatabaseBody) -> APIDatabaseCreated:
         """POST /v1/databases — scope `databases:write`.
-        Errors: `INVALID_DATABASE_VERSION`, `SNAPSHOT_VERSION_NEWER`."""
+        With `snapshot_id` the answer is 202: the database is created first and the data comes back in the
+        background: the answer has `restore_job_id` (follow it with `snapshot_jobs.wait(db_id, job_id,
+        "databases")`). If the restore fails the database is kept as it is, empty or with what you wrote to it; the
+        job's `reason` says why.
+        Errors: `INVALID_DATABASE_VERSION`, `SNAPSHOT_VERSION_NEWER`, `SNAPSHOT_EXCEEDS_STORAGE`."""
         return self._c.request_json("POST", "/v1/databases", json_body=body)
 
     def update(self, db_id: str, body: UpdateDatabaseBody, *, workspace_id: str | None = None) -> APIDatabase:
@@ -127,14 +133,35 @@ class DatabasesResource:
             "POST", f"/v1/databases/{encode_path_param(db_id)}/stop", query={"workspace_id": workspace_id}
         )
 
-    def reset(self, db_id: str, *, workspace_id: str | None = None) -> None:
-        """POST /v1/databases/:id/reset — scope `databases:write`."""
+    def reset(
+        self,
+        db_id: str,
+        *,
+        workspace_id: str | None = None,
+        timeout: float | None = None,
+    ) -> APIDatabaseReset:
+        """POST /v1/databases/:id/reset — scope `databases:delete`. Resets the database right away and returns
+        `{"status": "success"}`. It is permanent: take a snapshot first (`snapshots.create`) if you may need the
+        data again."""
         return self._c.request_json(
-            "POST", f"/v1/databases/{encode_path_param(db_id)}/reset", query={"workspace_id": workspace_id}
+            "POST",
+            f"/v1/databases/{encode_path_param(db_id)}/reset",
+            query={"workspace_id": workspace_id},
+            timeout=timeout,
         )
 
-    def delete(self, db_id: str, *, workspace_id: str | None = None) -> None:
-        """DELETE /v1/databases/:id — scope `databases:delete`."""
+    def delete(
+        self,
+        db_id: str,
+        *,
+        workspace_id: str | None = None,
+        timeout: float | None = None,
+    ) -> str:
+        """DELETE /v1/databases/:id — scope `databases:delete`. Deletes the database right away and returns its
+        id. It is permanent: take a snapshot first (`snapshots.create`) if you may need the data again."""
         return self._c.request_json(
-            "DELETE", f"/v1/databases/{encode_path_param(db_id)}", query={"workspace_id": workspace_id}
+            "DELETE",
+            f"/v1/databases/{encode_path_param(db_id)}",
+            query={"workspace_id": workspace_id},
+            timeout=timeout,
         )
