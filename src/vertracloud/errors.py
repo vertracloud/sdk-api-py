@@ -93,6 +93,12 @@ class VertraAPIError(Exception):
         value = details.get("retry_after") if details else None
         return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
+    @property
+    def snapshot_exceeds_storage(self) -> dict[str, Any] | None:
+        """`details` of a `SNAPSHOT_EXCEEDS_STORAGE` error (`{required_bytes, available_bytes, required_ram_mb?}`);
+        `None` for any other error."""
+        return self._details_for("SNAPSHOT_EXCEEDS_STORAGE")
+
 
 class AuthenticationError(VertraAPIError):
     """401 — invalid key or user not found (`API_KEY_INVALID`, `USER_NOT_FOUND`)."""
@@ -111,7 +117,9 @@ class ValidationError(VertraAPIError):
 
 
 class RateLimitError(VertraAPIError):
-    """429 — per-minute limit or daily quota exceeded."""
+    """429 — per-minute limit or daily quota exceeded. `retry_after` (seconds) comes from the body, from
+    `details.retry_after` (`SNAPSHOT_RATE_LIMITED`, whose `details` also carry `scope` and `resets_at`) or from
+    the `retry-after` header."""
 
     def __init__(
         self,
@@ -150,6 +158,66 @@ class WaitTimeoutError(AppNotReadyError):
     """`wait_until_ready` timed out while the app was still `building` (`code` is `WAIT_TIMEOUT`)."""
 
 
+class SnapshotJobError(Exception):
+    """`snapshot_jobs.wait` (and what waits on it: `snapshots.create_and_wait`, `apps.download`, the stack
+    `wait_for_*` and `*_and_wait`) ended without a
+    `ready` job. `job` is the last payload seen (`None` if none); `code` is the job's `reason`."""
+
+    def __init__(self, message: str, *, code: str, job: Any = None) -> None:
+        self.code = code
+        self.job = job
+        super().__init__(f"{code}: {message}")
+
+    @property
+    def status(self) -> str | None:
+        """`status` of the last job read: `failed`, `skipped`, or `queued`/`running` after a timeout."""
+        status = self.job.get("status") if isinstance(self.job, dict) else None
+        return status if isinstance(status, str) else None
+
+    @property
+    def reason(self) -> str | None:
+        """The job's error code (same as `code`) when it ended `failed` or `skipped`; `None` after a timeout."""
+        return self.code if self.status in ("failed", "skipped") else None
+
+    @property
+    def details(self) -> dict[str, Any] | None:
+        """The `details` the job's `reason` would carry on a direct response, when it has any."""
+        details = self.job.get("details") if isinstance(self.job, dict) else None
+        return details if isinstance(details, dict) else None
+
+    @property
+    def snapshot_exceeds_storage(self) -> dict[str, Any] | None:
+        """`details` of a job that ended with `SNAPSHOT_EXCEEDS_STORAGE` (`{required_bytes, available_bytes,
+        required_ram_mb?}`); `None` for any other reason."""
+        return self.details if self.code == "SNAPSHOT_EXCEEDS_STORAGE" else None
+
+
+class SnapshotJobFailedError(SnapshotJobError):
+    """The job ended `failed`. `code` is the job's public `reason` (e.g. `SNAPSHOT_CORRUPTED`), or `SNAPSHOT_FAILED`
+    when the API sent none; `details` carries what the reason carries."""
+
+
+class SnapshotJobSkippedError(SnapshotJobError):
+    """The job ended `skipped`: nothing was done (the resource went away meanwhile, or the database was stopped).
+    `code` is the job's `reason`, or `SNAPSHOT_FAILED` when the API sent none."""
+
+
+class SnapshotJobTimeoutError(SnapshotJobError):
+    """The wait gave up while the job was still `queued` or `running` (`code` is `WAIT_TIMEOUT`). The job keeps
+    running; `job` is the last state read, with its `progress`."""
+
+
+class DownloadIncompleteError(OSError):
+    """A download ended with fewer bytes than the response's `Content-Length` (the connection dropped before the end of
+    the body). `expected` is the announced size, `received` what arrived. `download_to_file` never keeps such a file
+    (no temporary file is left and the destination is not created or replaced)."""
+
+    def __init__(self, *, expected: int, received: int) -> None:
+        self.expected = expected
+        self.received = received
+        super().__init__(f"The download ended after {received} of {expected} bytes; the connection was cut")
+
+
 def error_from_response(status: int, body: dict[str, Any]) -> VertraAPIError:
     """Picks the class from the HTTP status; `code` comes from the error response body."""
     code = str(body.get("code") or "UNKNOWN_ERROR")
@@ -165,6 +233,8 @@ def error_from_response(status: int, body: dict[str, Any]) -> VertraAPIError:
         return ValidationError(message, status=status, code=code, details=details)
     if status == 429:
         retry_after = body.get("retry_after")
+        if retry_after is None and isinstance(details, dict):
+            retry_after = details.get("retry_after")
         try:
             retry_after = float(retry_after) if retry_after is not None else None
         except (TypeError, ValueError):

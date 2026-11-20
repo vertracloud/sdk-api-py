@@ -368,7 +368,8 @@ class APIPlanLimits(TypedDict):
 
 class APIPlanFeatures(TypedDict):
     web_published: bool
-    daily_backups: bool
+    daily_app_backups: bool
+    daily_database_backups: bool
     create_backup: bool
     advanced_metrics: bool
     create_workspace: bool
@@ -380,7 +381,6 @@ class APIPlanFeatures(TypedDict):
     rollback: bool
     auto_rollback: bool
     zero_downtime: bool
-    delete_snapshot: bool
     powered_by_badge: bool
     blob_metadata: bool
     blob_share_password: bool
@@ -558,6 +558,10 @@ class APIApplicationCreated(APIApplication, total=False):
     on a custom image and the recorded image version no longer exists: the app uses the current version."""
 
     warning: SnapshotImageWarning
+    # Only when created from `snapshot_id`: the restore job to follow with `snapshot_jobs.get` / `snapshot_jobs.wait`
+    # (scope `"applications"`, resource id = this app). The app is created first and its files come back in the
+    # background: an app of code that fails to restore is deleted by the API; one on a custom image is kept as is.
+    restore_job_id: str
 
 
 class APIApplicationNetwork(TypedDict):
@@ -574,6 +578,8 @@ class _APIApplicationStatusRequired(TypedDict):
     storage: str
     network: APIApplicationNetwork
     uptime: int
+    # Set while a restore of this resource is queued or running (follow it on `snapshot_jobs.get`); `None` otherwise.
+    restore_job_id: str | None
 
 
 class APIApplicationStatus(_APIApplicationStatusRequired, total=False):
@@ -586,6 +592,8 @@ class _APIApplicationStatusShortRequired(TypedDict):
     ram: str
     running: bool
     uptime: int | None
+    # Set while a restore of this resource is queued or running (follow it on `snapshot_jobs.get`); `None` otherwise.
+    restore_job_id: str | None
 
 
 class APIApplicationStatusShort(_APIApplicationStatusShortRequired, total=False):
@@ -752,21 +760,6 @@ class APIApplicationFileContent(TypedDict):
     last_modified: str
 
 
-class _APIApplicationScanSuggestionsRequired(TypedDict):
-    language: ApplicationLanguage | None
-    main: str | None
-    version: str | None
-    has_manifest: bool
-    candidates: list[ApplicationLanguage]
-
-
-class APIApplicationScanSuggestions(_APIApplicationScanSuggestionsRequired, total=False):
-    suggested_start_command: str
-    suggested_build_command: str
-    suggested_memory_mb: int
-    suggested_public_web: bool
-
-
 class APIRuntimeEntry(TypedDict):
     recommended: str
     latest: str
@@ -804,6 +797,14 @@ class APIDatabase(_APIDatabaseRequired, total=False):
     stack_service_key: str | None
 
 
+class APIDatabaseCreated(APIDatabase, total=False):
+    """Response of `databases.create`. With `snapshot_id`, the data comes back in the background: `restore_job_id`
+    is the job to follow (`snapshot_jobs.get` / `snapshot_jobs.wait`, scope `"databases"`). If the restore fails the
+    database is kept as it is (it accepts connections from the start); the job's `reason` says why."""
+
+    restore_job_id: str
+
+
 class APIDatabaseVersionCatalog(TypedDict):
     recommended: str
     available: list[str]
@@ -827,6 +828,8 @@ class APIDatabaseStatus(TypedDict):
     storage: str
     network: APIDatabaseNetwork
     uptime: int
+    # Set while a restore of this resource is queued or running (follow it on `snapshot_jobs.get`); `None` otherwise.
+    restore_job_id: str | None
 
 
 class APIDatabaseStatusShort(TypedDict):
@@ -835,6 +838,8 @@ class APIDatabaseStatusShort(TypedDict):
     ram: str
     storage: str
     running: bool
+    # Set while a restore of this resource is queued or running (follow it on `snapshot_jobs.get`); `None` otherwise.
+    restore_job_id: str | None
 
 
 class APIDatabaseMetrics(TypedDict):
@@ -870,7 +875,6 @@ class APIDatabaseCertificateReset(APIDatabaseCertificate, APIRestartRequired):
 class _APIResourceSnapshotRequired(TypedDict):
     id: str
     resource_id: str
-    author_id: str | None
     resource_type: int | None
     size: str
     date: str
@@ -881,6 +885,10 @@ class APIResourceSnapshot(_APIResourceSnapshotRequired, total=False):
     # True for a snapshot of an app of a closed template: it cannot be downloaded, only restores into an app of the
     # same template (anything else fails with `TEMPLATE_CLOSED`).
     closed: bool
+    # What took the snapshot. Absent on snapshots that predate this field.
+    origin: SnapshotOrigin
+    # Applications only: files that kept changing while the snapshot was read. 0 or absent: none.
+    changed_files: int
 
 
 class APIGroupedResourceSnapshots(TypedDict):
@@ -891,13 +899,111 @@ class APIGroupedResourceSnapshots(TypedDict):
     snapshots: list[APIResourceSnapshot]
 
 
-class _APISnapshotRestoreResponseRequired(TypedDict):
-    message: str
+class _APIDatabaseResetRequired(TypedDict):
+    status: Literal["success"]
 
 
-class APISnapshotRestoreResponse(_APISnapshotRestoreResponseRequired, total=False):
-    # Set when `restore_image_version` was asked but the recorded image version is gone: only data was restored.
+class APIDatabaseReset(_APIDatabaseResetRequired):
+    """What `databases.reset` returns: `{"status": "success"}`."""
+
+
+class _APISnapshotRestoreAcceptedRequired(TypedDict):
+    job_id: str
+
+
+class APISnapshotRestoreAccepted(_APISnapshotRestoreAcceptedRequired, total=False):
+    """What `snapshots.restore` returns: the restore was accepted (HTTP 202) and runs as a job, so the resource is
+    not restored yet. Follow `job_id` with `snapshot_jobs.get` or `snapshot_jobs.wait`."""
+
+    # Set when `restore_image_version` was asked but the recorded image version is gone: only the data is restored.
     warning: SnapshotImageWarning
+
+
+# What took a snapshot: you (`manual`) or the plan's daily backup (`automatic`).
+SnapshotOrigin = Literal["manual", "automatic"]
+SnapshotJobKind = Literal["snapshot", "restore"]
+SnapshotJobStatus = Literal["queued", "running", "ready", "skipped", "failed"]
+SnapshotJobPhase = Literal["preparing", "copying", "finishing"]
+
+
+class _APISnapshotJobRequired(TypedDict):
+    id: str
+    kind: SnapshotJobKind
+    # The resource the job acts on: the one being backed up, or the target of a restore.
+    resource_id: str
+    status: SnapshotJobStatus
+    created_at: str
+
+
+class _APISnapshotJobProgressRequired(TypedDict):
+    phase: SnapshotJobPhase
+
+
+class APISnapshotJobProgress(_APISnapshotJobProgressRequired, total=False):
+    """Progress of a `running` job. `percent` (0-100) is absent when the total size is not known (database
+    snapshots) and `eta_seconds` until there is a stable rate."""
+
+    percent: float
+    done_bytes: int
+    total_bytes: int
+    eta_seconds: float
+
+
+class APISnapshotJob(_APISnapshotJobRequired, total=False):
+    """A snapshot or restore job of a resource."""
+
+    # Error code of a `failed` (or `skipped`) job.
+    reason: str
+    # The same `details` the error `reason` would carry on a direct response, when it has any. Only with `reason`.
+    details: APISnapshotTooLargeDetails | APISnapshotExceedsStorageDetails
+    # Snapshot jobs: the snapshot the job produced; a `ready` snapshot job always has it. Restore jobs: the snapshot
+    # being restored, from the start.
+    snapshot_id: str
+    # Snapshot jobs only: what asked for the snapshot. Absent on restore jobs.
+    origin: SnapshotOrigin
+    started_at: str
+    finished_at: str
+    # Only while `running`; absent when queued, once the job ends, or when it is not known.
+    progress: APISnapshotJobProgress
+
+
+class APISnapshotTooLargeDetails(TypedDict):
+    """`details` of `SNAPSHOT_TOO_LARGE` (413): the largest content, in bytes, a snapshot of the resource can have."""
+
+    max_bytes: int
+
+
+class APIRestoreCooldownDetails(TypedDict):
+    """`details` of `RESTORE_COOLDOWN` (429), also sent by a release rollback: seconds until a restore of the resource
+    is accepted again (`RateLimitError.retry_after` and the `Retry-After` header carry the same value)."""
+
+    retry_after: int
+
+
+class APIOperationInProgressDetails(TypedDict, total=False):
+    """`details` of `OPERATION_IN_PROGRESS` (409) when creating a snapshot: a manual snapshot of the same resource is
+    already queued or running and `job_id` is its job (`snapshot_jobs.wait`). Absent for any other cause."""
+
+    job_id: str
+
+
+class APISnapshotCreateAccepted(TypedDict):
+    """What `snapshots.create` returns on the 202 answer (the snapshot is still being taken): follow `job_id` with
+    `snapshot_jobs.wait`; the snapshot shows up in `snapshots.list` when it is ready."""
+
+    job_id: str
+
+
+class _APISnapshotExceedsStorageDetailsRequired(TypedDict):
+    required_bytes: int
+    available_bytes: int
+
+
+class APISnapshotExceedsStorageDetails(_APISnapshotExceedsStorageDetailsRequired, total=False):
+    """`details` of `SNAPSHOT_EXCEEDS_STORAGE` (400): the snapshot does not fit in the target."""
+
+    # Databases only: the smallest memory size, in MB, whose storage has room for the snapshot.
+    required_ram_mb: int
 
 
 class APIUser(TypedDict):
@@ -2003,11 +2109,18 @@ class APITemplateValidation(TypedDict):
 # -- deploy
 
 
-class APITemplateDeployStepState(TypedDict):
+class _APITemplateDeployStepStateRequired(TypedDict):
     step: TemplateDeployStep
     status: TemplateDeployStepStatus
     started_at: str | None
     finished_at: str | None
+
+
+class APITemplateDeployStepState(_APITemplateDeployStepStateRequired, total=False):
+    # Only on the `snapshot` and `rollback` steps of an update: one job per app or database (a snapshot job on
+    # `snapshot`, a restore job on `rollback`), present once the step has queued them. Follow each with
+    # `snapshot_jobs` using `resource_id`.
+    jobs: list[APIStackSnapshotJob]
 
 
 class _APITemplateDeployErrorRequired(TypedDict):
@@ -2325,7 +2438,7 @@ StackMemberType = Literal["application", "database", "blob"]
 StackBlobDisposition = Literal["keep", "delete"]
 StackBindingRemoval = Literal["keep_connection", "remove_variables"]
 StackDeleteMode = Literal["dissolve", "delete_all"]
-StackSnapshotReason = Literal["manual", "update", "delete"]
+StackSnapshotReason = Literal["manual", "update"]
 StackBindingValue = Literal[
     "url",
     "host",
@@ -2429,16 +2542,28 @@ class APIStackConnectionInfo(TypedDict):
     snippets: list[APIStackConnectionSnippet]
 
 
-class APIStackSnapshotMember(TypedDict):
+StackSnapshotStatus = Literal["pending", "ready"]
+
+
+class _APIStackSnapshotMemberRequired(TypedDict):
     resource_type: Literal["application", "database"]
     resource_id: str
-    snapshot_id: str
+    # `None` while the stack snapshot is `pending`.
+    snapshot_id: str | None
+
+
+class APIStackSnapshotMember(_APIStackSnapshotMemberRequired, total=False):
+    # Only while the stack snapshot is `pending`: the job to follow with `snapshot_jobs`.
+    job_id: str
 
 
 class APIStackSnapshot(TypedDict):
     id: str
     stack_id: str
     reason: StackSnapshotReason
+    # `pending` while the snapshots of the members are being taken; `ready` once every member has its snapshot
+    # (a stack snapshot that failed is not listed).
+    status: StackSnapshotStatus
     date: str
     size: str
     members: list[APIStackSnapshotMember]
@@ -2456,6 +2581,9 @@ class APIStackBlobAdded(APIRestartRequired):
 
 
 class APIStackDeleteResult(TypedDict):
+    """What `stacks.delete` returns (HTTP 200): the resources deleted together with the stack. Both lists are empty
+    and `deleted_blob` is `False` with `mode` `dissolve`."""
+
     deleted_apps: list[str]
     deleted_databases: list[str]
     deleted_blob: bool
@@ -2556,6 +2684,59 @@ class StackBlobBody(TypedDict, total=False):
 
 class StackSnapshotRestoreBody(TypedDict, total=False):
     restore_image_version: bool
+
+
+class APIStackSnapshotJob(TypedDict):
+    """Job of one member of a stack snapshot (taking it or restoring it). Follow it with `snapshot_jobs` using
+    `resource_id` and the scope that matches `resource_type` (`"application"` -> `"applications"`,
+    `"database"` -> `"databases"`)."""
+
+    resource_id: str
+    resource_type: Literal["application", "database"]
+    job_id: str
+
+
+class APIStackSnapshotAccepted(TypedDict):
+    """What `stacks.snapshots.create` returns (HTTP 202): the stack snapshot `id` and one snapshot job per member
+    (databases first); nothing is taken yet. Each member is a regular manual snapshot. The stack snapshot is listed
+    as `pending` and becomes `ready` when the last job ends; a failed one is not listed."""
+
+    id: str
+    jobs: list[APIStackSnapshotJob]
+
+
+class _APIStackSnapshotRestoreMemberJobRequired(TypedDict):
+    resource_id: str
+    resource_type: Literal["application", "database"]
+    job_id: str
+
+
+class APIStackSnapshotRestoreMemberJob(_APIStackSnapshotRestoreMemberJobRequired, total=False):
+    """Restore job of one member of a stack snapshot (see `APIStackSnapshotJob`)."""
+
+    # Set when `restore_image_version` was asked but the image version recorded for this application is gone: only its
+    # data is restored.
+    warning: SnapshotImageWarning
+
+
+class APIStackSnapshotRestoreAccepted(TypedDict):
+    """What `stacks.snapshots.restore` returns (HTTP 202): one job per member, databases first, and nothing is
+    restored yet. The stack is restored when every job is `ready`; after a failed
+    member the jobs behind it end `failed` with `STACK_RESTORE_MEMBER_FAILED`."""
+
+    jobs: list[APIStackSnapshotRestoreMemberJob]
+
+
+class APIStackSnapshotCreateAndWaitResult(APIStackSnapshotAccepted):
+    """What `stacks.snapshots.create_and_wait` returns: the accepted answer and the final job of each member."""
+
+    finished: list[APISnapshotJob]
+
+
+class APIStackSnapshotRestoreAndWaitResult(APIStackSnapshotRestoreAccepted):
+    """What `stacks.snapshots.restore_and_wait` returns: the accepted answer and the final job of each member."""
+
+    finished: list[APISnapshotJob]
 
 
 # -- API keys (listed by the dashboard; the SDK has no route for them, the types serve code that decodes them)

@@ -142,6 +142,20 @@ def test_deploys_get_and_events_paths() -> None:
     assert transport.calls[1].stream is True
 
 
+def test_deploys_get_keeps_jobs_on_snapshot_step() -> None:
+    client, transport = _client()
+    step = {
+        "step": "snapshot",
+        "status": "running",
+        "started_at": None,
+        "finished_at": None,
+        "jobs": [{"resource_id": ID, "resource_type": "application", "job_id": ID2}],
+    }
+    transport.queue_json({"response": {**JOB, "kind": "update", "steps": [step]}})
+    job = client.templates.deploys.get(ID)
+    assert job["steps"][0]["jobs"] == step["jobs"]
+
+
 def test_event_stream_skips_heartbeats_and_stops_at_end() -> None:
     client, transport = _client()
     first = {"deploy_id": ID, "status": "running", "current_step": "apps", "steps": [], "error": None}

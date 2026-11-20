@@ -1,4 +1,4 @@
-"""Error codes of the template, stack and web analytics routes, as found in `VertraAPIError.code`.
+"""Error codes of the template, stack, snapshot, file and web analytics routes, as found in `VertraAPIError.code`.
 
 Compare with the constants instead of retyping the strings::
 
@@ -69,3 +69,28 @@ PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_PERFORMANCE = "PLAN_DOES_NOT_SUPPORT_WEB_ANA
 PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_REQUESTS = "PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_REQUESTS"  # 403
 ANALYTICS_RANGE_EXCEEDS_PLAN = "ANALYTICS_RANGE_EXCEEDS_PLAN"  # 400; `VertraAPIError.analytics_range`
 ANALYTICS_BUSY = "ANALYTICS_BUSY"  # 503; `VertraAPIError.analytics_retry_after`
+
+# -- snapshots and database actions that depend on them
+DATABASE_NOT_READY = "DATABASE_NOT_READY"  # 503
+SNAPSHOT_FAILED = "SNAPSHOT_FAILED"  # the reason of a snapshot job that failed
+SNAPSHOT_TIMEOUT = "SNAPSHOT_TIMEOUT"  # 504
+SNAPSHOT_TOO_LARGE = "SNAPSHOT_TOO_LARGE"  # `details.max_bytes`
+SNAPSHOT_RATE_LIMITED = "SNAPSHOT_RATE_LIMITED"  # 429; `details`: `scope`, `retry_after`, `resets_at`
+
+# -- restore as a job, operations blocked by a snapshot
+RESTORE_COOLDOWN = "RESTORE_COOLDOWN"  # 429: the wait between restores or rollbacks; `RateLimitError.retry_after`
+RESTORE_IN_PROGRESS = "RESTORE_IN_PROGRESS"  # 409: a restore is running on the resource; reads still work
+SNAPSHOT_EXCEEDS_STORAGE = "SNAPSHOT_EXCEEDS_STORAGE"  # 400; `VertraAPIError.snapshot_exceeds_storage`
+SNAPSHOT_CORRUPTED = "SNAPSHOT_CORRUPTED"  # 422: nothing was changed
+SNAPSHOT_IMPORT_FAILED = "SNAPSHOT_IMPORT_FAILED"
+SNAPSHOT_ENGINE_MISMATCH = "SNAPSHOT_ENGINE_MISMATCH"
+SNAPSHOT_VERSION_NEWER = "SNAPSHOT_VERSION_NEWER"
+STACK_RESTORE_MEMBER_FAILED = "STACK_RESTORE_MEMBER_FAILED"  # stack restore: closed behind a failed member
+SNAPSHOT_NOT_FOUND = "SNAPSHOT_NOT_FOUND"  # also a job of another resource or account
+APP_BUILDING = "APP_BUILDING"  # 409: the app is deploying; wait for it
+OPERATION_IN_PROGRESS = (
+    "OPERATION_IN_PROGRESS"  # 409: a snapshot of the app is running (`details.job_id` when it is the same resource)
+)
+
+# -- file manager
+FILE_TOO_LARGE = "FILE_TOO_LARGE"  # 413; `details.max_bytes`

@@ -10,7 +10,13 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from vertracloud import VertraClient, errcodes
-from vertracloud.errors import NotFoundError, VertraAPIError
+from vertracloud.errors import (
+    NotFoundError,
+    SnapshotJobFailedError,
+    SnapshotJobSkippedError,
+    SnapshotJobTimeoutError,
+    VertraAPIError,
+)
 
 from .fake_transport import FakeTransport, RecordedCall
 
@@ -61,14 +67,14 @@ def test_transform_update_delete() -> None:
     client, transport = _client()
     client.stacks.transform({"folder_id": ID, "inject_variables": False, "name": "x"})
     client.stacks.update(ID, {"description": None})
-    client.stacks.delete(ID, {"mode": "delete_all", "confirm_name": "shop", "blob": "keep"})
+    client.stacks.delete(ID, {"mode": "dissolve", "confirm_name": "shop", "blob": "keep"})
     assert [(c.method, c.path) for c in transport.calls] == [
         ("POST", "/v1/stacks/transform"),
         ("PATCH", f"/v1/stacks/{ID}"),
         ("DELETE", f"/v1/stacks/{ID}"),
     ]
     assert _json_body(transport.calls[1]) == {"description": None}
-    assert _json_body(transport.calls[2]) == {"mode": "delete_all", "confirm_name": "shop", "blob": "keep"}
+    assert _json_body(transport.calls[2]) == {"mode": "dissolve", "confirm_name": "shop", "blob": "keep"}
 
 
 def test_connection_network_mode_and_additions() -> None:
@@ -198,3 +204,144 @@ def test_image_template_only_error_is_a_plain_api_error() -> None:
     with pytest.raises(VertraAPIError) as info:
         client.images.update(ID, {"name": "x"})
     assert info.value.code == "IMAGE_TEMPLATE_ONLY"
+
+
+def test_stack_restore_returns_the_jobs_and_waits_for_each_member(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("vertracloud.resources.snapshot_jobs.time.sleep", lambda _s: None)
+    client, transport = _client()
+    accepted = {
+        "jobs": [
+            {"resource_id": ID, "resource_type": "database", "job_id": ID2},
+            {"resource_id": ID2, "resource_type": "application", "job_id": ID, "warning": "IMAGE_VERSION_NOT_FOUND"},
+        ],
+    }
+    transport.queue_json({"response": accepted}, 202)
+    transport.queue_json({"response": {"status": "ready"}})
+    transport.queue_json({"response": {"status": "ready"}})
+    got = client.stacks.snapshots.restore(ID, ID2)
+    assert got["jobs"][0]["resource_type"] == "database"
+    assert got["jobs"][1]["warning"] == "IMAGE_VERSION_NOT_FOUND"
+    assert "warning" not in got
+    jobs = client.stacks.snapshots.wait_for_restore(got)
+    assert [j["status"] for j in jobs] == ["ready", "ready"]
+    assert transport.calls[1].path == f"/v1/users/{ID}/snapshots/jobs/{ID2}"
+    assert _query(transport.calls[1])["scope"] == ["databases"]
+    assert _query(transport.calls[2])["scope"] == ["applications"]
+
+
+def test_stack_wait_raises_at_the_first_member_that_fails_or_is_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("vertracloud.resources.snapshot_jobs.time.sleep", lambda _s: None)
+    client, transport = _client()
+    accepted: Any = {
+        "jobs": [
+            {"resource_id": ID, "resource_type": "database", "job_id": ID2},
+            {"resource_id": ID2, "resource_type": "application", "job_id": ID},
+        ]
+    }
+    transport.queue_json({"response": {"kind": "restore", "status": "ready"}})
+    transport.queue_json({"response": {"kind": "restore", "status": "skipped", "reason": "APP_NOT_FOUND"}})
+    with pytest.raises(SnapshotJobSkippedError) as info:
+        client.stacks.snapshots.wait_for_restore(accepted)
+    assert info.value.reason == "APP_NOT_FOUND"
+    transport.queue_json({"response": {"kind": "snapshot", "status": "failed", "reason": "SNAPSHOT_TOO_LARGE"}})
+    with pytest.raises(SnapshotJobFailedError):
+        client.stacks.snapshots.wait_for_create({"id": ID, **accepted})
+
+
+def test_stack_snapshot_create_returns_the_group_and_waits_for_each_member(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("vertracloud.resources.snapshot_jobs.time.sleep", lambda _s: None)
+    client, transport = _client()
+    accepted = {
+        "id": ID,
+        "jobs": [
+            {"resource_id": ID, "resource_type": "database", "job_id": ID2},
+            {"resource_id": ID2, "resource_type": "application", "job_id": ID},
+        ],
+    }
+    transport.queue_json({"response": accepted}, 202)
+    transport.queue_json({"response": {"status": "ready"}})
+    transport.queue_json({"response": {"status": "ready"}})
+    got = client.stacks.snapshots.create(ID)
+    assert got["id"] == ID
+    assert got["jobs"][0]["resource_type"] == "database"
+    assert transport.calls[0].method == "POST"
+    assert transport.calls[0].path == f"/v1/stacks/{ID}/snapshots"
+    assert len(transport.calls) == 1
+    jobs = client.stacks.snapshots.wait_for_create(got)
+    assert [j["status"] for j in jobs] == ["ready", "ready"]
+    assert _query(transport.calls[1])["scope"] == ["databases"]
+    assert _query(transport.calls[2])["scope"] == ["applications"]
+
+
+def _two_jobs() -> list[dict[str, str]]:
+    return [
+        {"resource_id": ID, "resource_type": "database", "job_id": ID2},
+        {"resource_id": ID2, "resource_type": "application", "job_id": ID},
+    ]
+
+
+def test_stack_create_and_wait_starts_the_snapshot_and_follows_every_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("vertracloud.resources.snapshot_jobs.time.sleep", lambda _s: None)
+    client, transport = _client()
+    transport.queue_json({"response": {"id": ID, "jobs": _two_jobs()}}, 202)
+    transport.queue_json({"response": {"status": "ready"}})
+    transport.queue_json({"response": {"status": "ready"}})
+    got = client.stacks.snapshots.create_and_wait(ID, workspace_id=ID2, timeout=11)
+    assert got["id"] == ID
+    assert [j["status"] for j in got["finished"]] == ["ready", "ready"]
+    assert [c.timeout for c in transport.calls[1:]] == [11, 11]
+    assert _query(transport.calls[0]) == {"workspace_id": [ID2]}
+    # Cada membro é acompanhado no mesmo workspace: sem ele a rota de jobs não acha o job do workspace.
+    assert [_query(c).get("workspace_id") for c in transport.calls[1:]] == [[ID2], [ID2]]
+
+
+def test_stack_restore_and_wait_restores_then_follows_every_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("vertracloud.resources.snapshot_jobs.time.sleep", lambda _s: None)
+    client, transport = _client()
+    transport.queue_json({"response": {"jobs": _two_jobs()}}, 202)
+    transport.queue_json({"response": {"status": "ready"}})
+    transport.queue_json({"response": {"status": "ready"}})
+    got = client.stacks.snapshots.restore_and_wait(ID, ID2, restore_image_version=True, wait_timeout=60)
+    assert transport.calls[0].path == f"/v1/stacks/{ID}/snapshots/{ID2}/restore"
+    assert _json_body(transport.calls[0]) == {"restore_image_version": True}
+    assert [j["status"] for j in got["finished"]] == ["ready", "ready"]
+
+
+def test_stack_wait_for_uses_wait_timeout_as_the_total_for_all_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = [0.0]
+    monkeypatch.setattr("time.monotonic", lambda: now[0])
+    monkeypatch.setattr("time.sleep", lambda s: now.__setitem__(0, now[0] + s))
+    client, transport = _client()
+    transport.default_json = {"response": {"kind": "snapshot", "status": "running"}}
+    with pytest.raises(SnapshotJobTimeoutError):
+        client.stacks.snapshots.wait_for_create({"id": ID, "jobs": _two_jobs()}, wait_timeout=5, interval=2)  # type: ignore[typeddict-item]
+    assert now[0] <= 5
+
+
+def test_stack_restore_keeps_the_client_timeout_and_accepts_a_per_call_one() -> None:
+    client, transport = _client()
+    client.stacks.snapshots.restore(ID, ID2)
+    assert transport.calls[-1].timeout == client.timeout
+    client.stacks.snapshots.restore(ID, ID2, timeout=200)
+    assert transport.calls[-1].timeout == 200
+    slow = VertraClient(api_key="k", transport=transport, timeout=300)
+    slow.stacks.snapshots.restore(ID, ID2)
+    assert transport.calls[-1].timeout == 300
+
+
+def test_other_stack_routes_keep_the_client_timeout() -> None:
+    client, transport = _client()
+    client.stacks.get(ID)
+    assert transport.calls[-1].timeout == client.timeout
+
+
+def test_delete_all_answers_200_with_what_was_deleted() -> None:
+    client, transport = _client()
+    result = {"deleted_apps": [ID], "deleted_databases": [ID2], "deleted_blob": True}
+    transport.queue_json({"response": result})
+    got = client.stacks.delete(ID, {"mode": "delete_all", "confirm_name": "shop", "blob": "delete"})
+    assert got == result
+    assert len(transport.calls) == 1
+    assert transport.calls[0].method == "DELETE"
+    assert _json_body(transport.calls[0]) == {"mode": "delete_all", "confirm_name": "shop", "blob": "delete"}
+    assert transport.calls[0].timeout == client.timeout

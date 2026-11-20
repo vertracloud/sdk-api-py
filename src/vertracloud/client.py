@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
+import secrets
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from typing import Any
 from urllib.parse import quote, unquote, urlencode
 
-from .errors import error_from_response
+from .errors import DownloadIncompleteError, error_from_response
 from .sse import SseStream
 from .transport import Response, Transport, UrllibTransport
 from .types import JsonValue
@@ -21,8 +23,84 @@ __version__ = "0.4.2"  # x-release-please-version
 DEFAULT_BASE_URL = "https://api.vertracloud.app"
 DEFAULT_BLOB_BASE_URL = "https://blob.vertracloud.app/v1"
 DEFAULT_TIMEOUT = 30.0
-# Download/upload/create for an app may involve a large zip file, so the timeout is longer.
+# Upload/create for an app may involve a large zip file, so the timeout is longer.
 LARGE_PAYLOAD_TIMEOUT = 120.0
+# Creating a snapshot can run for about 90 s.
+SNAPSHOT_ACTION_TIMEOUT = 120.0
+# Default `wait_timeout` of the helpers that follow a job (30 minutes): the total wait, not a per-request limit;
+# the work keeps going on the server after it.
+DEFAULT_WAIT_TIMEOUT = 1800.0
+# Bytes read at a time by the streaming downloads.
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+def _close(stream: Iterator[bytes]) -> None:
+    close = getattr(stream, "close", None)
+    if callable(close):
+        close()
+
+
+class _LengthCheckedStream:
+    """Passes the chunks of `stream` through and, at the end, raises `DownloadIncompleteError` when the bytes received
+    are fewer than `expected` (the `Content-Length`): the HTTP layer reports a body cut by the connection as a plain
+    end of data."""
+
+    def __init__(self, stream: Iterator[bytes], expected: int) -> None:
+        self._stream = stream
+        self._expected = expected
+        self._received = 0
+
+    def __iter__(self) -> _LengthCheckedStream:
+        return self
+
+    def __next__(self) -> bytes:
+        try:
+            chunk = next(self._stream)
+        except StopIteration:
+            if self._received != self._expected:
+                _close(self._stream)
+                raise DownloadIncompleteError(expected=self._expected, received=self._received) from None
+            raise
+        self._received += len(chunk)
+        return chunk
+
+    def close(self) -> None:
+        _close(self._stream)
+
+
+def _content_length(headers: dict[str, str]) -> int | None:
+    raw = headers.get("content-length")
+    if raw is None or not raw.strip().isdigit():
+        return None
+    return int(raw)
+
+
+def write_stream_to_file(chunks: Iterator[bytes], destination: str | os.PathLike[str]) -> int:
+    """Writes `chunks` to `destination` through a temporary file next to it (`<name>.<random>.part`, mode 0600: a
+    snapshot can hold secrets), renamed to `destination` only when the iterator ends. A failure removes the temporary
+    file and closes `chunks`."""
+    final = os.fspath(destination)
+    temp = f"{final}.{secrets.token_hex(6)}.part"
+    written = 0
+    try:
+        fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except BaseException:
+        _close(chunks)
+        raise
+    try:
+        with os.fdopen(fd, "wb") as out:
+            for chunk in chunks:
+                out.write(chunk)
+                written += len(chunk)
+        os.replace(temp, final)
+    except BaseException:
+        _close(chunks)
+        try:
+            os.unlink(temp)
+        except FileNotFoundError:
+            pass
+        raise
+    return written
 
 
 def _is_dot_segment(value: str) -> bool:
@@ -138,6 +216,7 @@ class VertraClient:
         from .resources.databases import DatabasesResource
         from .resources.images import ImagesResource
         from .resources.plans import PlansResource
+        from .resources.snapshot_jobs import SnapshotJobsResource
         from .resources.snapshots import SnapshotsResource
         from .resources.stacks import StacksResource
         from .resources.templates import TemplatesResource
@@ -149,6 +228,7 @@ class VertraClient:
         self.templates = TemplatesResource(self)
         self.stacks = StacksResource(self)
         self.snapshots = SnapshotsResource(self)
+        self.snapshot_jobs = SnapshotJobsResource(self)
         self.account = AccountResource(self)
         self.workspaces = WorkspacesResource(self)
         self.billing = BillingResource(self)
@@ -194,13 +274,41 @@ class VertraClient:
         auth: bool = True,
     ) -> JsonValue:
         """Standard JSON call: sends `json_body` (if given), unwraps `{response}`. `auth=False` for public routes."""
+        return self._unwrap(
+            self._send_json(
+                method,
+                path,
+                query=query,
+                json_body=json_body,
+                timeout=timeout,
+                base_url=base_url,
+                extra_headers=extra_headers,
+                auth=auth,
+            )
+        )
+
+    def snapshot_action_timeout(self, timeout: float | None) -> float:
+        """Timeout of a call that takes a snapshot: the caller's, else the larger of the client's and 120 s."""
+        return timeout if timeout is not None else max(self.timeout, SNAPSHOT_ACTION_TIMEOUT)
+
+    def _send_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: dict[str, Any] | None = None,
+        json_body: Any = None,
+        timeout: float | None = None,
+        base_url: str | None = None,
+        extra_headers: dict[str, str] | None = None,
+        auth: bool = True,
+    ) -> Response:
         extra = dict(extra_headers or {})
         if json_body is not None:
             extra["Content-Type"] = "application/json"
         headers = self._headers(extra, auth=auth)
         body = json.dumps(json_body).encode("utf-8") if json_body is not None else None
-        resp = self.transport.request(method, self._url(path, query, base_url), headers, body, timeout or self.timeout)
-        return self._unwrap(resp)
+        return self.transport.request(method, self._url(path, query, base_url), headers, body, timeout or self.timeout)
 
     def request_multipart(
         self,
@@ -234,12 +342,59 @@ class VertraClient:
         query: dict[str, Any] | None = None,
         timeout: float | None = None,
     ) -> bytes:
-        """Binary downloads (app/snapshot zip, certificate). No JSON envelope."""
+        """Binary downloads (snapshot zip), the whole body in memory. No JSON envelope. `timeout` is the wait of each
+        socket operation (connect, each read), not a total: a file that keeps arriving completes however long it takes.
+        For a file that can be large use `request_binary_stream` or `download_to_file`."""
         headers = self._headers({"Accept": "*/*"})
         resp = self.transport.request(method, self._url(path, query), headers, None, timeout or self.timeout)
         if resp.status >= 400:
             self._raise_for_error(resp)
         return resp.body
+
+    def request_binary_stream(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: dict[str, Any] | None = None,
+        timeout: float | None = None,
+        chunk_size: int = DOWNLOAD_CHUNK_SIZE,
+    ) -> Iterator[bytes]:
+        """Same request as `request_binary`, but returns the body as an iterator of byte chunks read as you ask for
+        them: memory does not grow with the file. The request is made (and an API error raised) before this returns.
+        `timeout` is the wait of each read, so a body that stops sending raises (`TimeoutError`/`OSError`). Call
+        `close()` on the iterator, or iterate to the end, to release the connection."""
+        headers = self._headers({"Accept": "*/*"})
+        resp = self.transport.request(
+            method, self._url(path, query), headers, None, timeout or self.timeout, stream=True, chunk_size=chunk_size
+        )
+        if resp.status >= 400:
+            if resp.stream is None:
+                self._raise_for_error(resp)
+            else:
+                try:
+                    self._raise_for_error(Response(resp.status, resp.headers, b"".join(resp.stream)))
+                finally:
+                    _close(resp.stream)
+        if resp.stream is None:
+            return iter([resp.body] if resp.body else [])
+        expected = _content_length({k.lower(): v for k, v in resp.headers.items()})
+        return resp.stream if expected is None else _LengthCheckedStream(resp.stream, expected)
+
+    def download_to_file(
+        self,
+        method: str,
+        path: str,
+        destination: str | os.PathLike[str],
+        *,
+        query: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> int:
+        """`request_binary_stream` written to `destination` as the bytes arrive; returns the bytes written. The bytes go
+        to a temporary file next to `destination`, renamed to it only when the body ends; on any failure (including
+        `KeyboardInterrupt`) the temporary file is removed and `destination` never holds a partial file."""
+        stream = self.request_binary_stream(method, path, query=query, timeout=timeout)
+        return write_stream_to_file(stream, destination)
 
     def request_sse(
         self,
