@@ -9,7 +9,7 @@ from pathlib import Path
 from vertracloud import VertraClient
 
 from .fake_transport import FakeTransport
-from .routes_matrix import FORBIDDEN_PATHS, FROZEN_ROUTES, route_to_regex
+from .routes_matrix import FORBIDDEN_PATHS, FROZEN_ROUTES, NOT_COVERED_ROUTES, route_to_regex
 
 ID = "11111111-1111-1111-1111-111111111111"
 ID2 = "22222222-2222-2222-2222-222222222222"
@@ -28,6 +28,8 @@ def _drive_all_calls(client: VertraClient, transport: FakeTransport) -> None:
     apps.runtimes()
     apps.metrics(ID)
     apps.logs(ID)
+    transport.queue_json({"response": {"id": ID2}}, 201)
+    transport.queue_binary(b"zip")
     apps.download(ID)
     transport.queue_stream([b"event: system\n", b"data: hi\n", b"\n"])
     stream = apps.realtime(ID)
@@ -90,6 +92,10 @@ def _drive_all_calls(client: VertraClient, transport: FakeTransport) -> None:
     snapshots.download(ID, ID2, "applications")
     snapshots.create(ID, "applications")
     snapshots.restore(ID, ID2, "applications")
+
+    snapshot_jobs = client.snapshot_jobs
+    snapshot_jobs.list(ID, "applications")
+    snapshot_jobs.get(ID, ID2, "applications")
 
     account = client.account
     account.get()
@@ -269,8 +275,8 @@ def test_no_forbidden_path_in_source() -> None:
 
 
 def test_fixture_matches_api_key_catalog() -> None:
-    """The fixture must exactly match the public API key catalog. Only runs in the monorepo,
-    where `api-types` is a sibling of this repo."""
+    """The fixture (covered routes plus the ones not covered yet) must exactly match the public API key
+    catalog. Only runs in the monorepo, where `api-types` is a sibling of this repo."""
     import pytest
 
     catalog = Path(__file__).resolve().parents[2] / "api-types" / "payloads" / "v1" / "api-key.ts"
@@ -279,4 +285,4 @@ def test_fixture_matches_api_key_catalog() -> None:
     routes = set(re.findall(r'\{ method: "([A-Z]+)", path: "([^"]+)" \}', catalog.read_text(encoding="utf-8")))
     # Blob Storage lives on its own host (`client.blob`), covered by `test_blob.py`.
     routes = {r for r in routes if not r[1].startswith("/v1/blob/")}
-    assert routes == set(FROZEN_ROUTES)
+    assert routes == set(FROZEN_ROUTES) | set(NOT_COVERED_ROUTES)

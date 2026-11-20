@@ -74,6 +74,7 @@ def test_upload_file_message_is_a_text_part_and_optional() -> None:
 
 def test_download_returns_raw_bytes_not_json() -> None:
     transport = FakeTransport()
+    transport.queue_json({"response": {"id": "snap-1"}}, 201)
     transport.queue_binary(b"\x50\x4b\x03\x04fake-zip")
     client = VertraClient(api_key="k", transport=transport)
     data = client.apps.download("app-1")

@@ -5,12 +5,13 @@
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Iterator, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
-from ..client import LARGE_PAYLOAD_TIMEOUT, MultipartField, encode_path_param
+from ..client import DEFAULT_WAIT_TIMEOUT, LARGE_PAYLOAD_TIMEOUT, MultipartField, encode_path_param
 from ..errors import AppBuildFailedError, WaitTimeoutError
 from ..sse import SseStream
 from ..types import (
@@ -41,6 +42,7 @@ from ..types import (
     APIApplicationWebhook,
     APIApplicationWebPublish,
     APIRuntimesResponse,
+    APISnapshotJob,
     APISubdomainResponse,
     APIWebhookUrl,
     ApplicationAnalyticsDimension,
@@ -58,8 +60,11 @@ from ..types import (
     UpdateAppConfigBody,
     UpdateDomainBody,
 )
+from .snapshots import SnapshotsResource
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from typing_extensions import Unpack
 
     from ..client import VertraClient
@@ -489,7 +494,8 @@ class AppFilesResource:
         )
 
     def read(self, app_id: str, *, path: str, workspace_id: str | None = None) -> APIApplicationFileContent:
-        """GET /v1/apps/:id/files/content — scope `apps:files`."""
+        """GET /v1/apps/:id/files/content — scope `apps:files`. Files above 10 MiB are not read: the call fails with
+        `FILE_TOO_LARGE` (413), whose `details.max_bytes` is the limit."""
         return self._c.request_json(
             "GET",
             f"/v1/apps/{encode_path_param(app_id)}/files/content",
@@ -506,7 +512,8 @@ class AppFilesResource:
         workspace_id: str | None = None,
         confirm_detach: bool = False,
     ) -> None:
-        """PUT /v1/apps/:id/files — scope `apps:files`. Response is void.
+        """PUT /v1/apps/:id/files — scope `apps:files`. Response is void. `content` is limited to 10 MiB: above it
+        the call fails with `FILE_TOO_LARGE` (413), whose `details.max_bytes` is the limit.
 
         An app that came from an open template stops receiving versions of it when its code is changed: without
         `confirm_detach=True` the call fails with `TEMPLATE_DETACH_CONFIRMATION_REQUIRED` and changes nothing
@@ -635,14 +642,93 @@ class AppsResource:
             "GET", f"/v1/apps/{encode_path_param(app_id)}/logs", query={"workspace_id": workspace_id}
         )
 
-    def download(self, app_id: str, *, workspace_id: str | None = None, timeout: float | None = None) -> bytes:
-        """GET /v1/apps/:id/download — scope `apps:read`. Binary zip. Rate limit 10/min."""
-        return self._c.request_binary(
-            "GET",
-            f"/v1/apps/{encode_path_param(app_id)}/download",
-            query={"workspace_id": workspace_id},
-            timeout=timeout if timeout is not None else LARGE_PAYLOAD_TIMEOUT,
+    def download(
+        self,
+        app_id: str,
+        *,
+        workspace_id: str | None = None,
+        timeout: float | None = None,
+        wait_timeout: float = DEFAULT_WAIT_TIMEOUT,
+        interval: float = 2.0,
+        on_progress: Callable[[APISnapshotJob], None] | None = None,
+    ) -> bytes:
+        """Downloads the whole application as a zip: takes a manual snapshot of it (`snapshots.create_and_wait`,
+        `POST /v1/users/:id/snapshots`, which follows the job when the API answers 202) and downloads that snapshot
+        (`snapshots.download`). The snapshot stays in `snapshots.list` and counts on the manual snapshot quota. The API
+        key needs the scopes `snapshots:write` (take it) and `snapshots:read` (download it); `apps:files` alone does
+        not download. An account without a plan cannot take the snapshot (`PLAN_NOT_ALLOWED`, 403) but can still
+        download the snapshots it has with `snapshots.download`.
+
+        `timeout` is the limit of each request and `wait_timeout` the total wait for the snapshot (30 minutes by
+        default); the download of the zip itself has no total deadline, only `timeout` without receiving bytes.
+        Raises `SnapshotJobFailedError`, `SnapshotJobSkippedError` or `SnapshotJobTimeoutError` like
+        `snapshots.create_and_wait`, and `RateLimitError` (`SNAPSHOT_RATE_LIMITED`, `retry_after`) over the snapshot
+        limits.
+
+        The whole zip is held in memory: for an app that can be large use `download_to_file` (writes to disk as the
+        bytes arrive) or `download_stream`."""
+        snapshot_id = self._snapshot_for_download(app_id, workspace_id, timeout, wait_timeout, interval, on_progress)
+        return SnapshotsResource(self._c).download(
+            app_id, snapshot_id, "applications", workspace_id=workspace_id, timeout=timeout
         )
+
+    def download_stream(
+        self,
+        app_id: str,
+        *,
+        workspace_id: str | None = None,
+        timeout: float | None = None,
+        wait_timeout: float = DEFAULT_WAIT_TIMEOUT,
+        interval: float = 2.0,
+        on_progress: Callable[[APISnapshotJob], None] | None = None,
+    ) -> Iterator[bytes]:
+        """Same as `download` (takes the manual snapshot, follows the job, downloads it) but returns an iterator of byte
+        chunks read as you ask for them: memory does not grow with the app. Same scopes, limits and errors as
+        `download`."""
+        snapshot_id = self._snapshot_for_download(app_id, workspace_id, timeout, wait_timeout, interval, on_progress)
+        return SnapshotsResource(self._c).download_stream(
+            app_id, snapshot_id, "applications", workspace_id=workspace_id, timeout=timeout
+        )
+
+    def download_to_file(
+        self,
+        app_id: str,
+        path: str | os.PathLike[str],
+        *,
+        workspace_id: str | None = None,
+        timeout: float | None = None,
+        wait_timeout: float = DEFAULT_WAIT_TIMEOUT,
+        interval: float = 2.0,
+        on_progress: Callable[[APISnapshotJob], None] | None = None,
+    ) -> int:
+        """Same as `download`, written to `path` as the bytes arrive: memory stays constant whatever the size of the
+        app. The zip goes to a temporary file next to `path`, renamed to it only when the download ends; on failure,
+        stall or `KeyboardInterrupt` the temporary file is removed and `path` never holds a partial file. Returns the
+        number of bytes written. Same scopes, limits and errors as `download`."""
+        snapshot_id = self._snapshot_for_download(app_id, workspace_id, timeout, wait_timeout, interval, on_progress)
+        return SnapshotsResource(self._c).download_to_file(
+            app_id, snapshot_id, "applications", path, workspace_id=workspace_id, timeout=timeout
+        )
+
+    def _snapshot_for_download(
+        self,
+        app_id: str,
+        workspace_id: str | None,
+        timeout: float | None,
+        wait_timeout: float,
+        interval: float,
+        on_progress: Callable[[APISnapshotJob], None] | None,
+    ) -> str:
+        snapshot = SnapshotsResource(self._c).create_and_wait(
+            app_id,
+            "applications",
+            workspace_id=workspace_id,
+            timeout=timeout,
+            wait_timeout=wait_timeout,
+            interval=interval,
+            on_progress=on_progress,
+        )
+        return snapshot["id"]
 
     def realtime(
         self, app_id: str, *, since: int | None = None, workspace_id: str | None = None, timeout: float | None = None
@@ -670,6 +756,10 @@ class AppsResource:
         `warning` (`IMAGE_VERSION_NOT_FOUND`). Rate limit 15/min, plus the plan's
         deploys-per-hour cap. Replies 202 with `status: "building"`: the build continues in the
         background — use `wait_until_ready`, `logs` or `realtime` to follow it.
+        With `snapshot_id` in `body` it replies 202 and the answer has `restore_job_id`: the files come back in the
+        background (follow it with `snapshot_jobs.wait(app_id, job_id, "applications")`; the app (re)starts when it
+        ends). If the restore fails, an app created from a code snapshot is deleted by the API and one on a custom
+        image is kept as it is; the job's `reason` says why. Refused up front with `SNAPSHOT_EXCEEDS_STORAGE`.
         Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/create
         """
         fields: list[MultipartField] = []
@@ -764,8 +854,18 @@ class AppsResource:
             query={"workspace_id": workspace_id},
         )
 
-    def delete(self, app_id: str, *, workspace_id: str | None = None) -> None:
-        """DELETE /v1/apps/:id — scope `apps:delete`."""
+    def delete(
+        self,
+        app_id: str,
+        *,
+        workspace_id: str | None = None,
+        timeout: float | None = None,
+    ) -> None:
+        """DELETE /v1/apps/:id — scope `apps:delete`. Deletes the app right away. It is permanent: take a
+        snapshot first (`snapshots.create`) if you may need the data again."""
         return self._c.request_json(
-            "DELETE", f"/v1/apps/{encode_path_param(app_id)}", query={"workspace_id": workspace_id}
+            "DELETE",
+            f"/v1/apps/{encode_path_param(app_id)}",
+            query={"workspace_id": workspace_id},
+            timeout=timeout,
         )

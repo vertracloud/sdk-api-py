@@ -1,5 +1,5 @@
-"""Local fixture with the 183 routes from the API key catalog, and the list of forbidden
-paths. `tests/test_routes_matrix.py` proves exact coverage and exclusion."""
+"""Local fixture with the routes from the API key catalog (184 the SDK covers, plus the ones it does not
+cover yet), and the list of forbidden paths. `tests/test_routes_matrix.py` proves exact coverage and exclusion."""
 
 from __future__ import annotations
 
@@ -46,7 +46,6 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("GET", "/v1/apps/:id/releases"),
     ("GET", "/v1/apps/:id/releases/:release_id/log"),
     ("GET", "/v1/apps/:id/releases/:release_id/rollback"),
-    ("GET", "/v1/apps/:id/download"),
     ("GET", "/v1/apps/:id/envs"),
     ("GET", "/v1/apps/:id/files"),
     ("GET", "/v1/apps/:id/files/content"),
@@ -70,6 +69,8 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("GET", "/v1/images/:image_id/versions"),
     ("GET", "/v1/orders"),
     ("GET", "/v1/orders/:orderId/status"),
+    ("GET", "/v1/users/:id/snapshots/jobs"),
+    ("GET", "/v1/users/:id/snapshots/jobs/:job_id"),
     ("GET", "/v1/users/:id/snapshots"),
     ("GET", "/v1/users/:id/snapshots/:snapshot_id/download"),
     ("GET", "/v1/users/me"),
@@ -190,7 +191,13 @@ FROZEN_ROUTES: list[tuple[str, str]] = [
     ("POST", "/v1/workspaces/:id/templates/:template_id"),
 ]
 
-assert len(FROZEN_ROUTES) == 183, f"expected 183 frozen routes, found {len(FROZEN_ROUTES)}"
+assert len(FROZEN_ROUTES) == 184, f"expected 184 frozen routes, found {len(FROZEN_ROUTES)}"
+
+# Routes of the catalog the SDK has no method for yet. They are in the catalog, so the catalog check expects them,
+# but no method generates them: move a route to `FROZEN_ROUTES` when its method exists.
+NOT_COVERED_ROUTES: list[tuple[str, str]] = [
+    ("POST", "/v1/images/uploads"),  # direct upload of an image build context
+]
 
 # Forbidden paths: none of these may appear, in any form, in `src/vertracloud/**`.
 FORBIDDEN_PATHS: list[str] = [
