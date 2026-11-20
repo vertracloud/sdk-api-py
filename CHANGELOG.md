@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.3](https://github.com/vertracloud/sdk-api-py/compare/v0.4.2...v0.4.3) (2026-11-20)
+
+
+### Features
+
+* **apps:** download an app as a snapshot and stream it to disk ([fe517aa](https://github.com/vertracloud/sdk-api-py/commit/fe517aa66340fdd8012a029863f2300589018c1a))
+* **databases:** reset and delete run right away ([25a1635](https://github.com/vertracloud/sdk-api-py/commit/25a163521993b41f8c90f1f5165a1caa11477afe))
+* **snapshots:** follow snapshot jobs and stream downloads to a file ([3818624](https://github.com/vertracloud/sdk-api-py/commit/381862465befbe645ada8f818fb670441e42d54f))
+* **transport:** read response bodies in chunks ([22d4251](https://github.com/vertracloud/sdk-api-py/commit/22d4251f3761830b14826e7d4d0ceda72f6578eb))
+
 ## [0.4.2](https://github.com/vertracloud/sdk-api-py/compare/v0.4.1...v0.4.2) (2026-11-11)
 
 
