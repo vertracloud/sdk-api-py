@@ -19,6 +19,7 @@ class RecordedCall:
     body: bytes | None
     timeout: float
     stream: bool
+    chunk_size: int | None = None
 
     @property
     def path(self) -> str:
@@ -71,9 +72,18 @@ class FakeTransport:
         timeout: float,
         *,
         stream: bool = False,
+        chunk_size: int | None = None,
     ) -> Response:
         self.calls.append(
-            RecordedCall(method=method, url=url, headers=dict(headers), body=body, timeout=timeout, stream=stream)
+            RecordedCall(
+                method=method,
+                url=url,
+                headers=dict(headers),
+                body=body,
+                timeout=timeout,
+                stream=stream,
+                chunk_size=chunk_size,
+            )
         )
         if self._queue:
             return self._queue.pop(0)

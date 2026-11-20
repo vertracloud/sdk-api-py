@@ -10,13 +10,13 @@ import urllib.request
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from email.message import Message
-from typing import Protocol
+from typing import Any, Protocol
 from urllib.parse import urlsplit
 
 
 @dataclass
 class Response:
-    """Raw response from a call. `stream` is only set when requested (SSE)."""
+    """Raw response from a call. `stream` is only set when requested (SSE lines, or byte chunks with `chunk_size`)."""
 
     status: int
     headers: dict[str, str]
@@ -34,6 +34,7 @@ class Transport(Protocol):
         timeout: float,
         *,
         stream: bool = False,
+        chunk_size: int | None = None,
     ) -> Response: ...
 
 
@@ -70,6 +71,36 @@ def _origin(url: str) -> tuple[str, str, int | None]:
 _opener = urllib.request.build_opener(_AuthStrippingRedirectHandler)
 
 
+class ChunkStream:
+    """Byte chunks of an open response, read as the caller asks (nothing is buffered). `close()` is safe at any moment,
+    even before the first chunk. `timeout` of the request applies to each read, so a stalled body raises."""
+
+    def __init__(self, resp: Any, chunk_size: int) -> None:
+        self._resp = resp
+        self._chunk_size = chunk_size
+
+    def __iter__(self) -> ChunkStream:
+        return self
+
+    def __next__(self) -> bytes:
+        if self._resp is None:
+            raise StopIteration
+        try:
+            chunk: bytes = self._resp.read(self._chunk_size)
+        except BaseException:
+            self.close()
+            raise
+        if not chunk:
+            self.close()
+            raise StopIteration
+        return chunk
+
+    def close(self) -> None:
+        resp, self._resp = self._resp, None
+        if resp is not None:
+            resp.close()
+
+
 @dataclass
 class UrllibTransport:
     """Default implementation, pure stdlib (`urllib`) — zero runtime dependencies."""
@@ -85,6 +116,7 @@ class UrllibTransport:
         timeout: float,
         *,
         stream: bool = False,
+        chunk_size: int | None = None,
     ) -> Response:
         req = urllib.request.Request(url, data=body, headers=headers, method=method)
         try:
@@ -95,6 +127,8 @@ class UrllibTransport:
             return Response(status=exc.code, headers=resp_headers, body=data)
 
         resp_headers = {k.lower(): v for k, v in resp.headers.items()}
+        if stream and chunk_size:
+            return Response(status=resp.status, headers=resp_headers, stream=ChunkStream(resp, chunk_size))
         if stream:
 
             def iterator() -> Iterator[bytes]:
