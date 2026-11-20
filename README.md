@@ -57,14 +57,14 @@ client = VertraClient(
 
 ### Per-call options
 
-Methods on apps, databases, images, templates and stacks take a keyword-only `workspace_id`; downloads, uploads and streams also take `timeout`:
+Methods on apps, databases, images, templates and stacks take a keyword-only `workspace_id`; downloads, uploads and streams also take `timeout` (the limit of each request, never a total wait; the `wait_timeout` of the `*_and_wait` and `wait_for_*` helpers is the total):
 
 ```python
 # Act on a resource that belongs to a workspace
 app = client.apps.get(app_id, workspace_id=workspace_id)
 
 # Give one slow call more time
-zip_bytes = client.apps.download(app_id, timeout=300)
+zip_bytes = client.apps.download(app_id, timeout=300)  # per request; the wait for the snapshot is `wait_timeout`
 ```
 
 Nested resources are attributes: `client.apps.deploys`, `client.apps.releases`, `client.apps.envs`, `client.workspaces.members`, `client.billing.orders`, …
@@ -155,17 +155,26 @@ An app with no site published answers `web_published: False` and empty data. `PL
 
 ### Uploading and downloading
 
-Uploads take `bytes`; downloads return `bytes`.
+Uploads take `bytes`. To download, use `download_to_file`, which writes to disk as the bytes arrive and keeps memory constant whatever the size; `download` returns `bytes` and holds the whole file in memory, so keep it for small files.
 
 ```python
 with open("app.zip", "rb") as f:
     app = client.apps.create({"name": "my-app", "memory": 512}, file=f.read())
 
-with open("backup.zip", "wb") as f:
-    f.write(client.apps.download(app_id))
+written = client.apps.download_to_file(app_id, "backup.zip")  # bytes written
 ```
 
-`client.snapshots.download` works the same way.
+`client.snapshots.download(resource_id, snapshot_id, scope)` downloads one snapshot of an app or a database as `bytes`. It has no total deadline: `timeout` (30 s by default) is the wait of each socket operation, so a large file that keeps arriving completes however long it takes, and one that stops sending bytes fails after `timeout`.
+
+`apps.download` downloads the whole app as a zip: it takes a manual snapshot (`snapshots.create_and_wait`, which waits for the job when the API answers 202) and downloads it. The snapshot stays in `snapshots.list` and counts on the manual snapshot quota. An API key needs the scopes `snapshots:write` (to take the snapshot) and `snapshots:read` (to download it); `apps:files` alone does not download. `wait_timeout` is the total wait for the snapshot (30 minutes by default), `interval` the poll interval and `timeout` the limit of each request; it raises what `snapshots.create_and_wait` raises. An account without a plan cannot take the snapshot, but can list and download the ones it has.
+
+```python
+written = client.apps.download_to_file(
+    app_id, "backup.zip", wait_timeout=900, on_progress=lambda job: print(job["status"])
+)
+```
+
+`download_to_file` is the recommended form for anything that can be large (a snapshot of several GB is fine): the zip goes to a temporary file next to the destination, is renamed to the final name only when the download ends, and a failure, a stall (`timeout` without bytes), a connection cut before the announced `Content-Length` (`DownloadIncompleteError`, an `OSError`) or a `KeyboardInterrupt` removes the temporary file, so the destination never holds a partial file. The snapshot and app downloads take `workspace_id` like the rest, and send it on every call of the flow (take the snapshot, follow the job, download). `client.snapshots.download_to_file(resource_id, snapshot_id, scope, path)` does the same for an existing snapshot. `apps.download_stream` and `snapshots.download_stream` return an iterator of byte chunks (1 MiB at most) when you want to send the bytes somewhere other than a file; `apps.download` and `snapshots.download` return the whole zip as `bytes`.
 
 ### Waiting for the first build
 
@@ -313,7 +322,7 @@ if change["restart_required"]:
     print("restart:", change["apps_to_restart"])
 ```
 
-`delete` needs `confirm_name` equal to the stack name; mode `dissolve` removes only the stack, `delete_all` deletes the members too. `members`, `bindings` and `snapshots` group the routes of members, connections and whole-stack snapshots; `connection` returns code to connect an app to what it is linked to. Move a stack or a template to a workspace with `workspaces.stacks` and `workspaces.templates`. The error codes of both areas are constants in `vertracloud.errcodes`.
+`delete` needs `confirm_name` equal to the stack name; mode `dissolve` removes only the stack (200). Mode `delete_all` deletes the members too. Both answer 200 right away with `{"deleted_apps", "deleted_databases", "deleted_blob"}` and are permanent: take a snapshot first (`stacks.snapshots.create`) if you may need the data again. `members`, `bindings` and `snapshots` group the routes of members, connections and whole-stack snapshots; `connection` returns code to connect an app to what it is linked to. Move a stack or a template to a workspace with `workspaces.stacks` and `workspaces.templates`. The error codes of both areas are constants in `vertracloud.errcodes`.
 
 ### Database versions
 
@@ -324,6 +333,8 @@ print(db["version"])  # major line, e.g. "18"
 ```
 
 Omit `version` to get the recommended one; with `snapshot_id`, omit it to keep the snapshot's line (an older one fails with `SNAPSHOT_VERSION_NEWER`, an unknown one with `INVALID_DATABASE_VERSION`). A database's version cannot be changed after creation; security updates are applied when it is stopped and started.
+
+With `snapshot_id` the database is created first (201) and the data comes back in the background: the answer has `restore_job_id`, to follow with `snapshot_jobs.wait(db["id"], db["restore_job_id"], "databases")`. If the restore fails, **the database is kept** (empty, or with what you wrote to it) and the job's `reason` says why. `apps.create` with `snapshot_id` also answers with `restore_job_id`; there an app of code whose restore fails is deleted by the API, while an app on a custom image is kept as it is.
 
 ### Plans and quotes
 
@@ -338,6 +349,74 @@ print(quote["total"], quote["period_discount_percent"], quote["legacy_price"])
 ```
 
 `client.billing.orders.create` takes the same `plan` and `months`. `plan` is a `PlanName`: `starter-1`, `starter-2`, `pro-4`, `pro-6`, `pro-8`, `business-12`, `business-16`, `business-24` or `enterprise-32` up to `enterprise-512`.
+
+### Snapshots
+
+Deleting an app (`apps.delete`) or a database (`databases.delete`), resetting a database (`databases.reset`) and restoring a snapshot (`snapshots.restore`) run right away and are permanent: they replace or remove the current data. If you may need it again, take a snapshot first. `apps.delete` returns `None`, `databases.delete` returns the database id, `databases.reset` returns `{"status": "success"}` and `snapshots.restore` returns `{"job_id": ..., "warning"?: ...}`.
+
+```python
+client.snapshots.create_and_wait(db_id, "databases")
+client.databases.reset(db_id)
+```
+
+`snapshots.create` can take up to 90 seconds, so its timeout is 120 s (the client's, if larger) and `timeout=` overrides it per call. Creating snapshots is limited: a quota over a rolling 24 hours that depends on the plan's RAM, and a wait between snapshots of the same resource (and a 5 s pause per user, answered with a plain `RATE_LIMIT_EXCEEDED` 429). Over a snapshot limit the call fails with `SNAPSHOT_RATE_LIMITED` (429) and `RateLimitError.retry_after` is the number of seconds to wait; `err.details` has the `scope` (`resource` or `account`) and, for `account`, `resets_at`. A manual snapshot can also answer 202 (`OPERATION_IN_PROGRESS` carries `details.job_id` when one of the same resource is already running) with `{"job_id": ...}` instead of a snapshot: it is still being taken. `snapshots.create` makes one request and returns either; `snapshots.create_and_wait` follows the job (below) and returns the snapshot. Other codes are constants in `vertracloud.errcodes` (`SNAPSHOT_TOO_LARGE` carries `details.max_bytes`).
+
+#### Restore as a job
+
+`snapshots.restore` answers 202: the restore runs in the background, so it returns `{"job_id": ..., "warning"?: ...}` and the resource is not restored yet. Follow the job with `client.snapshot_jobs`:
+
+```python
+from vertracloud import SnapshotJobFailedError, SnapshotJobSkippedError, SnapshotJobTimeoutError
+
+accepted = client.snapshots.restore(app_id, snapshot_id, "applications", restore_image_version=True)
+if accepted.get("warning"):
+    print(accepted["warning"])  # IMAGE_VERSION_NOT_FOUND: only the data is restored
+
+job = client.snapshot_jobs.get(app_id, accepted["job_id"])  # one look; `scope` is optional here
+print(job["status"])  # queued, running, ready, skipped or failed
+
+# on_progress runs on every poll while the job has not ended; job["progress"] exists only while it is running
+# (phase, percent?, done_bytes?, total_bytes?, eta_seconds?)
+show = lambda job: print(job["status"], job.get("progress"))  # noqa: E731
+
+try:
+    job = client.snapshot_jobs.wait(
+        app_id, accepted["job_id"], "applications", wait_timeout=900, interval=2, on_progress=show
+    )
+except (SnapshotJobFailedError, SnapshotJobSkippedError) as err:
+    print(err.code, err.details)  # the job's public reason, e.g. SNAPSHOT_CORRUPTED; err.job is the last payload
+except SnapshotJobTimeoutError:
+    ...  # still running; the job is not cancelled
+
+recent = client.snapshot_jobs.list(app_id, "applications", kind="restore", limit=5)  # limit 1 to 50
+```
+
+`stacks.snapshots.create` also answers 202, with `{"id": ..., "jobs": [{"resource_id", "resource_type", "job_id"}, ...]}`: one snapshot job per member (databases first), each a regular manual snapshot. The stack snapshot is listed as `pending` and becomes `ready` when the last job ends. Follow the jobs with `snapshot_jobs`, let `wait_for_create` do it under one `wait_timeout` (same outcomes as `wait_for_restore`) or call `stacks.snapshots.create_and_wait(stack_id)`, which resolves with the accepted answer plus `finished`, the final job of each member.
+
+`stacks.snapshots.restore` also answers 202, with `{"jobs": [{"resource_id", "resource_type", "job_id", "warning"?}, ...]}`: one job per member (`warning` is `IMAGE_VERSION_NOT_FOUND` for an application whose recorded image version is gone), restored in series by the server (databases first). The stack is back when every job is `ready`; when a member fails, the jobs after it end `failed` with `STACK_RESTORE_MEMBER_FAILED`. A refusal before the queue keeps the code and `details` of the member. Follow each job with `snapshot_jobs` (scope `"databases"` or `"applications"` by `resource_type`) let `wait_for_restore` do it under one `wait_timeout`, or call `stacks.snapshots.restore_and_wait(stack_id, snapshot_id)`:
+
+```python
+accepted = client.stacks.snapshots.restore(stack_id, snapshot_id)
+try:
+    finished = client.stacks.snapshots.wait_for_restore(accepted, wait_timeout=1800, interval=2)
+except SnapshotJobFailedError as err:
+    print(err.code, err.job)  # the first failed member (STACK_RESTORE_MEMBER_FAILED for the ones behind it)
+```
+
+`wait` is optional: it polls `get` until the job ends and returns the job when it is `ready`. It raises `SnapshotJobFailedError` or `SnapshotJobSkippedError` (`code` and `reason` = the job's `reason`, `details`, `job` = the last payload) when it ends any other way, and `SnapshotJobTimeoutError` (with the last `job`) after `wait_timeout`, the total wait (30 minutes by default); `timeout` is the limit of each request. `create_and_wait`, `wait_for_create`/`wait_for_restore`, `restore_and_wait` and `apps.download` behave the same. The `:id` of both routes is the resource the job acts on; `scope` is required to list and optional to get or wait for one job. While a restore runs every write to the resource fails with `RESTORE_IN_PROGRESS` (409); reads and deleting it still work. Before queueing, the API can refuse with `SNAPSHOT_EXCEEDS_STORAGE` (400; `err.snapshot_exceeds_storage` has `required_bytes`, `available_bytes` and, for databases, `required_ram_mb`), `APP_BUILDING` (409), `RESTORE_IN_PROGRESS` or `RESTORE_COOLDOWN` (429: the wait between restores or rollbacks, `RateLimitError.retry_after`, also in the `Retry-After` header). While a snapshot of an app is being taken, deploys, rollbacks, restarts, stops, environment changes and writes of the file manager fail with `OPERATION_IN_PROGRESS` (409): try again shortly.
+
+#### Wait helpers
+
+One pattern: `wait_for_<x>` follows something already started, `<verb>_and_wait` starts it and follows it. In all of them `wait_timeout` is the total wait (30 minutes by default), `timeout` the limit of each request and `interval` the poll interval; the work keeps running on the server after a timeout.
+
+| Start | Follow | Both |
+|---|---|---|
+| `snapshots.create` | `snapshot_jobs.wait(resource_id, job_id)` | `snapshots.create_and_wait`, `apps.download` (also downloads the zip) |
+| `snapshots.restore` | `snapshot_jobs.wait(resource_id, job_id)` | none |
+| `stacks.snapshots.create` | `stacks.snapshots.wait_for_create(accepted)` | `stacks.snapshots.create_and_wait` |
+| `stacks.snapshots.restore` | `stacks.snapshots.wait_for_restore(accepted)` | `stacks.snapshots.restore_and_wait` |
+
+`apps.wait_until_ready(app_id, timeout=...)` keeps its `timeout` as the total wait for the build.
 
 ### Errors
 
@@ -358,6 +437,8 @@ except VertraAPIError as err:
 
 A few errors carry a structured `details`; tolerant properties read them and give an empty value for any other error: `err.issues` (`DOCKERFILE_REFUSED`), `err.manifest_issues` (`TEMPLATE_MANIFEST_INVALID`), `err.secret_files` (`TEMPLATE_SECRET_IN_SOURCE`), `err.update_blocked` (`TEMPLATE_UPDATE_BLOCKED`) and `err.detach_action` (`TEMPLATE_DETACH_CONFIRMATION_REQUIRED`).
 
+`apps.files.read` and `apps.files.write` handle files up to 10 MiB; above it the call fails with `FILE_TOO_LARGE` (413) and `details.max_bytes` is the limit.
+
 Other subclasses: `AuthenticationError` (401), `ScopeDeniedError` (403 — including a missing key scope) and `ValidationError` (400/422). The error codes are listed in the [API reference](https://docs.vertracloud.app/api-reference/introduction).
 
 ### Testing your code
@@ -377,7 +458,7 @@ client = VertraClient(api_key="test", transport=my_fake_transport)
 | Custom images | `client.images` | 13 |
 | Templates | `client.templates` (+ `.deploys`, `.share_links`, `.share`, `.updates`) | 32 |
 | Stacks | `client.stacks` (+ `.members`, `.bindings`, `.snapshots`) | 20 |
-| Snapshots | `client.snapshots` | 5 |
+| Snapshots | `client.snapshots`, `client.snapshot_jobs` | 5 + 2 |
 | Account | `client.account` (+ `.sessions`, `.folders`, `.favorites`) | 10 |
 | Workspaces | `client.workspaces` (+ `.members`, `.roles`, `.invites`, `.action_requests`, `.apps`, `.databases`, `.templates`, `.stacks`, `.folders`, `.favorites`) | 34 |
 | Billing | `client.billing` (+ `.orders`, with `orders.quote`) | 8 |
