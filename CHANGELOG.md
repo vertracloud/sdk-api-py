@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/vertracloud/sdk-api-py/compare/v0.4.3...v0.4.4) (2026-11-24)
+
+
+### Features
+
+* auto restart, one-time database passwords, live metrics and metric events ([fca97c0](https://github.com/vertracloud/sdk-api-py/commit/fca97c0894f228c1f9a7dc17afbb5ab549f3284f))
+
 ## [0.4.3](https://github.com/vertracloud/sdk-api-py/compare/v0.4.2...v0.4.3) (2026-11-20)
 
 
