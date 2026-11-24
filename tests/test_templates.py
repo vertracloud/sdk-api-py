@@ -4,13 +4,14 @@ header (never in the body), the deploy event stream, `confirm_detach` on the cod
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, get_type_hints
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
 from vertracloud import TemplateDeployEventStream, VertraClient, errcodes
 from vertracloud.errors import ScopeDeniedError, VertraAPIError
+from vertracloud.types import APITemplateDeploy, APITemplateDeployDatabasePassword
 
 from .fake_transport import FakeTransport, RecordedCall
 
@@ -154,6 +155,19 @@ def test_deploys_get_keeps_jobs_on_snapshot_step() -> None:
     transport.queue_json({"response": {**JOB, "kind": "update", "steps": [step]}})
     job = client.templates.deploys.get(ID)
     assert job["steps"][0]["jobs"] == step["jobs"]
+
+
+def test_deploy_job_type_has_database_passwords() -> None:
+    assert set(get_type_hints(APITemplateDeployDatabasePassword)) == {"database_id", "service_id", "password"}
+    assert get_type_hints(APITemplateDeploy)["database_passwords"] == list[APITemplateDeployDatabasePassword]
+
+
+def test_deploys_get_returns_database_passwords() -> None:
+    client, transport = _client()
+    passwords = [{"database_id": ID2, "service_id": "db", "password": "s3cret"}]
+    transport.queue_json({"response": {**JOB, "status": "succeeded", "database_passwords": passwords}})
+    job = client.templates.deploys.get(ID)
+    assert job["database_passwords"] == passwords
 
 
 def test_event_stream_skips_heartbeats_and_stops_at_end() -> None:

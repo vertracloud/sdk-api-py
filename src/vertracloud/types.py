@@ -80,6 +80,8 @@ class CreateAppBody(TypedDict, total=False):
     description: str | None
     workspace_id: str
     envs: list[EnvEntry]
+    auto_restart: bool
+    """Restart the app by itself when it stops on its own. Omitted, the API uses `True`."""
 
 
 ApplicationZeroDowntime = Literal["auto", "on", "off"]
@@ -104,6 +106,7 @@ class UpdateAppConfigBody(TypedDict, total=False):
     ram: int
     language: str
     deploy: UpdateAppDeployBody
+    auto_restart: bool
 
 
 class RollbackAppBody(TypedDict, total=False):
@@ -463,6 +466,9 @@ ApplicationBuildError = Literal[
     "INSTALL_OUT_OF_MEMORY",
     "INSTALL_TIMEOUT",
     "INSTALL_SHIELD_BLOCKED",
+    "IMAGE_VOLUME_REFUSED",
+    "IMAGE_LABEL_REFUSED",
+    "IMAGE_PULL_FAILED",
 ]
 ApplicationFileType = Literal["file", "directory"]
 DatabaseStatus = Literal["up", "down"]
@@ -537,6 +543,7 @@ class _APIApplicationRequired(TypedDict):
     offline_since: str | None
     shield_cooldown: APIApplicationShieldCooldown | None
     deploy: APIApplicationDeploySettings
+    auto_restart: bool
     last_build_error: ApplicationBuildError | None
     # Custom Docker image the app runs from; `None` for a regular app.
     custom_image: APIApplicationCustomImage | None
@@ -613,12 +620,54 @@ class APIAppFileUploadResponse(_APIAppFileUploadResponseRequired, total=False):
     message: str
 
 
+APIMetricEventKind = Literal["restart", "auto_restart", "crash"]
+"""`restart` = requested by the user; `auto_restart` = the platform started the resource again after a failure;
+`crash` = the resource failed and stayed stopped."""
+
+
+class APIMetricEvent(TypedDict):
+    """An event shown on the metric charts, with its exact time."""
+
+    at: str
+    kind: APIMetricEventKind
+    out_of_memory: bool
+    """`True` when the failure was caused by running out of memory. Always `False` for `restart`."""
+
+
 class APIApplicationMetric(TypedDict):
     cpu: float
     ram: float
     storage: float
     date: str
     network: list[float]
+    events: list[APIMetricEvent]
+    """Events between this point's `date` and the next one's (up to now in the last point). An event before the
+    first point of the window is listed in the first point. Empty when nothing happened."""
+
+
+ApplicationRealtimeEventType = Literal["logs", "next_logs", "system", "metrics", "heartbeat"]
+"""`SseEvent.event` of `apps.realtime`. `next_logs` is the output of the new version while a zero-downtime deploy
+prepares it, in the same format as `logs`; `metrics` only arrives with `metrics=True` and carries
+`APIApplicationLiveMetrics` as JSON."""
+
+
+class APIApplicationLiveMetrics(TypedDict):
+    """`data` of a `metrics` event of `apps.realtime`, about every 5 seconds while the app runs. Rates are measured
+    between two consecutive readings."""
+
+    at: str
+    cpu_percent: float
+    """CPU in use as a percentage of the CPU of the app's plan, from 0 to 100."""
+    cpu_cores: float
+    memory_bytes: int
+    """Memory in use, without the reclaimable file cache."""
+    memory_limit_bytes: int | None
+    net_rx_bps: float
+    net_tx_bps: float
+    net_rx_bytes: int
+    """Bytes received since the app started."""
+    net_tx_bytes: int
+    """Bytes sent since the app started."""
 
 
 class APIApplicationEnvironmentManager(TypedDict):
@@ -751,6 +800,13 @@ class APIApplicationFileTree(APIApplicationFile, total=False):
     children: list[APIApplicationFileTree]
 
 
+class APIApplicationFileDelete(TypedDict):
+    """Answer of `apps.files.delete`: `now` when the space was freed right away, `on_restart` when the file was still
+    open and the space returns at the next restart."""
+
+    space_released: Literal["now", "on_restart"]
+
+
 class APIApplicationFileContent(TypedDict):
     """`data` holds the file bytes in standard base64; `size` is the decoded length."""
 
@@ -785,6 +841,7 @@ class _APIDatabaseRequired(TypedDict):
     updated_at: str
     last_snapshot: str | None
     offline_since: str | None
+    legacy_host: bool
     version: str
     """Engine major line, e.g. `"18"` or `"8.0"`; the patch is never exposed. Not limited to the
     catalog: older databases may report a line that is no longer offered for new ones."""
@@ -797,7 +854,13 @@ class APIDatabase(_APIDatabaseRequired, total=False):
     stack_service_key: str | None
 
 
-class APIDatabaseCreated(APIDatabase, total=False):
+class _APIDatabaseCreatedRequired(TypedDict):
+    password: str
+    """The database password. It comes only in this response: store it now; `credentials.password.reset` issues a
+    new one."""
+
+
+class APIDatabaseCreated(APIDatabase, _APIDatabaseCreatedRequired, total=False):
     """Response of `databases.create`. With `snapshot_id`, the data comes back in the background: `restore_job_id`
     is the job to follow (`snapshot_jobs.get` / `snapshot_jobs.wait`, scope `"databases"`). If the restore fails the
     database is kept as it is (it accepts connections from the start); the job's `reason` says why."""
@@ -848,6 +911,8 @@ class APIDatabaseMetrics(TypedDict):
     storage: float
     date: str
     network: list[float]
+    events: list[APIMetricEvent]
+    """Same as `APIApplicationMetric.events`."""
 
 
 class APIRestartRequired(TypedDict):
@@ -868,8 +933,18 @@ class APIDatabaseCertificate(TypedDict):
     pem: str
 
 
+class APIDatabaseClientVariableWithOldHost(TypedDict):
+    app_id: str
+    key: str
+
+
 class APIDatabaseCertificateReset(APIDatabaseCertificate, APIRestartRequired):
-    """New certificate after `databases.credentials.certificate.reset`, with the apps that must restart to read it."""
+    """New certificate after `databases.credentials.certificate.reset`, with the apps that must restart to read it,
+    the `host` it was issued for and the app variables that still hold the old address (empty when the address does
+    not change)."""
+
+    host: str
+    client_variables_with_old_host: list[APIDatabaseClientVariableWithOldHost]
 
 
 class _APIResourceSnapshotRequired(TypedDict):
@@ -1656,6 +1731,7 @@ class CreateAppFromImageBody(_CreateAppFromImageRequired, total=False):
     port: int
     envs: list[EnvEntry]
     workspace_id: str
+    auto_restart: bool
 
 
 # -- Templates and stacks: `templates.*`, `stacks.*` ----------------------------------------------
@@ -2149,6 +2225,12 @@ class APITemplateDeployOutput(TypedDict):
     once: bool
 
 
+class APITemplateDeployDatabasePassword(TypedDict):
+    database_id: str
+    service_id: str
+    password: str
+
+
 class APITemplateDeploy(TypedDict):
     id: str
     kind: TemplateDeployKind
@@ -2163,6 +2245,7 @@ class APITemplateDeploy(TypedDict):
     stack_id: str | None
     application_id: str | None
     outputs: list[APITemplateDeployOutput]
+    database_passwords: list[APITemplateDeployDatabasePassword]
     created_at: str
     updated_at: str
     finished_at: str | None
@@ -2573,6 +2656,8 @@ class APIStackSnapshot(TypedDict):
 class APIStackDatabaseAdded(APIRestartRequired):
     stack: APIStack
     database_id: str
+    password: str
+    """The password of the new database. It comes only in this response."""
 
 
 class APIStackBlobAdded(APIRestartRequired):

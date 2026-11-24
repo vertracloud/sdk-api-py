@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from vertracloud import VertraClient
 from vertracloud.sse import SseStream
 
@@ -88,3 +90,42 @@ def test_realtime_request_passes_since_and_timeout_to_transport() -> None:
     assert call.timeout == 2.5
     assert "since=1000" in call.url
     assert call.headers["Accept"] == "text/event-stream"
+
+
+def test_realtime_sends_metrics_true_only_when_asked() -> None:
+    transport = FakeTransport()
+    transport.queue_stream([b"event: heartbeat\n", b"data: \n", b"\n"])
+    transport.queue_stream([b"event: heartbeat\n", b"data: \n", b"\n"])
+    client = VertraClient(api_key="k", transport=transport)
+    list(client.apps.realtime("app-1", metrics=True))
+    list(client.apps.realtime("app-1"))
+    assert "metrics=true" in transport.calls[0].url
+    assert "metrics" not in transport.calls[1].url
+
+
+def test_next_logs_and_metrics_events_are_delivered_and_metrics_parse() -> None:
+    payload = (
+        b'{"at":"2026-11-24T12:00:00.000Z","cpu_percent":12.5,"cpu_cores":0.25,"memory_bytes":104857600,'
+        b'"memory_limit_bytes":null,"net_rx_bps":10.5,"net_tx_bps":20,"net_rx_bytes":1000,"net_tx_bytes":2000}'
+    )
+    stream = SseStream(
+        iter(
+            [
+                b"event: next_logs\n",
+                b"data: installing\n",
+                b"\n",
+                b"event: metrics\n",
+                b"data: " + payload + b"\n",
+                b"\n",
+            ]
+        )
+    )
+    logs, metrics = list(stream)
+    assert logs.event == "next_logs"
+    assert logs.data == "installing"
+    live = metrics.live_metrics()
+    assert live["cpu_percent"] == 12.5
+    assert live["memory_limit_bytes"] is None
+    assert live["net_tx_bytes"] == 2000
+    with pytest.raises(ValueError):
+        logs.live_metrics()

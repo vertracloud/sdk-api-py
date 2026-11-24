@@ -129,6 +129,14 @@ client.apps.update_config(app_id, {"deploy": {"health_check_path": None}})  # cl
 
 `client.apps.files.upload(..., message="...")` sets the message shown in the release history.
 
+Automatic restart is set at creation (`client.apps.create({"name": "x", "auto_restart": False}, file=zip_bytes)`; omitted, it is on) and afterwards with `update_config`, applied right away without a restart or reinstall:
+
+```python
+client.apps.update_config(app_id, {"auto_restart": False})
+```
+
+`client.apps.files.delete` answers `{"space_released": "now" | "on_restart"}`: `on_restart` means the file was still open and the space returns at the next restart.
+
 ### Web Analytics
 
 Traffic, errors, performance and the request log of an app's site (scope `apps:read`). Every call takes a window (`start`, `end`, ISO 8601; at most 30 days, within the plan's `limits.web_analytics_history_days`) and one keyword per dimension to filter by (`country`, `edge_location`, `host`, `path` as a prefix, `method`, `status` or a class such as `5xx`, `protocol`, `device`, `os`, `browser`, `referer`, `asn`, `ip`, `content_type`, `cache_status`, `bot`). A `value` of a breakdown entry can be sent back as the filter unchanged; `"(none)"` filters the requests that had no value.
@@ -205,6 +213,23 @@ finally:
 ```
 
 Stop the stream with `break` or `stream.close()`. Pass `since=` to resume. There is no automatic reconnection.
+
+`event.event` is `logs`, `next_logs`, `system`, `metrics` or `heartbeat`. On a zero-downtime deploy, `next_logs` carries the output of the new version while it is prepared (same format as `logs`); the current version keeps writing to `logs`. Notes that already happened are sent again when the connection starts, as `<ISO 8601> <note>`; live notes have no prefix. New `system` notes: `install_note:build_oom` (the build ran out of memory) and `deploy_note:discarded:<release_id>[:<reason>]` (the new version was dropped and the current one keeps running; the reason is optional and new values may appear).
+
+Pass `metrics=True` to also receive a `metrics` event about every 5 seconds while the app runs, with its live CPU, memory and network:
+
+```python
+stream = client.apps.realtime(app_id, metrics=True)
+try:
+    for event in stream:
+        if event.event == "metrics":
+            live = event.live_metrics()  # APIApplicationLiveMetrics
+            print(live["cpu_percent"], live["memory_bytes"], live["net_rx_bps"])
+finally:
+    stream.close()
+```
+
+`client.apps.metrics` and `client.databases.metrics` return points with `events`: what happened between one point and the next (`restart`, `auto_restart` or `crash`, each with its `at` and `out_of_memory`).
 
 ### Blob Storage
 
@@ -330,7 +355,12 @@ if change["restart_required"]:
 catalog = client.databases.versions()  # keyed by engine type, as a string
 db = client.databases.create({"name": "meu-db", "type": 1, "ram": 512, "version": catalog["1"]["recommended"]})
 print(db["version"])  # major line, e.g. "18"
+print(db["password"])  # returned only by this call
 ```
+
+The password comes only in the `databases.create` response (and in `stacks.add_database`); afterwards `databases.credentials.password.reset` issues a new one.
+
+A database with `legacy_host: True` still uses the previous address. Moving it to the current address (`databases.credentials.certificate.reset`) is done only from the dashboard: with an API key the call fails with 403 `WEBSITE_ONLY`.
 
 Omit `version` to get the recommended one; with `snapshot_id`, omit it to keep the snapshot's line (an older one fails with `SNAPSHOT_VERSION_NEWER`, an unknown one with `INVALID_DATABASE_VERSION`). A database's version cannot be changed after creation; security updates are applied when it is stopped and started.
 

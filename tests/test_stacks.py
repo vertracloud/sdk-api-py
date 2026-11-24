@@ -77,6 +77,13 @@ def test_transform_update_delete() -> None:
     assert _json_body(transport.calls[2]) == {"mode": "dissolve", "confirm_name": "shop", "blob": "keep"}
 
 
+def test_stack_add_database_returns_the_password_the_api_sends_once() -> None:
+    client, transport = _client()
+    transport.queue_json({"response": {**CHANGE, "database_id": ID2, "password": "pw-once"}}, status=201)
+    result = client.stacks.add_database(ID, {"type": 1, "name": "db", "ram": 512})
+    assert result["password"] == "pw-once"
+
+
 def test_connection_network_mode_and_additions() -> None:
     client, transport = _client()
     client.stacks.connection(ID, app_id=ID2, language="python")

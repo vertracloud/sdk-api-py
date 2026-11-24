@@ -31,7 +31,9 @@ from ..types import (
     APIApplicationDomainDnsRecord,
     APIApplicationEnvironment,
     APIApplicationFileContent,
+    APIApplicationFileDelete,
     APIApplicationFileTree,
+    APIApplicationMetric,
     APIApplicationOperationResponse,
     APIApplicationRelease,
     APIApplicationReleaseLog,
@@ -543,9 +545,12 @@ class AppFilesResource:
             json_body={k: v for k, v in merged.items() if v is not None},
         )
 
-    def delete(self, app_id: str, *, path: str, workspace_id: str | None = None, confirm_detach: bool = False) -> None:
+    def delete(
+        self, app_id: str, *, path: str, workspace_id: str | None = None, confirm_detach: bool = False
+    ) -> APIApplicationFileDelete:
         """DELETE /v1/apps/:id/files — scope `apps:files`. Body: `{path, workspace_id?, confirm_detach?}`
-        (see `write` for `confirm_detach`)."""
+        (see `write` for `confirm_detach`). `space_released` says whether the space came back `now` or
+        `on_restart`."""
         body = {"path": path, "workspace_id": workspace_id, "confirm_detach": True if confirm_detach else None}
         return self._c.request_json(
             "DELETE",
@@ -628,7 +633,7 @@ class AppsResource:
 
     def metrics(
         self, app_id: str, *, workspace_id: str | None = None, range: str | None = None, since: int | None = None
-    ) -> list[Any]:
+    ) -> list[APIApplicationMetric]:
         """GET /v1/apps/:id/metrics — scope `apps:read`. Rate limit 50/min. JSON, not SSE."""
         return self._c.request_json(
             "GET",
@@ -731,15 +736,23 @@ class AppsResource:
         return snapshot["id"]
 
     def realtime(
-        self, app_id: str, *, since: int | None = None, workspace_id: str | None = None, timeout: float | None = None
+        self,
+        app_id: str,
+        *,
+        since: int | None = None,
+        metrics: bool | None = None,
+        workspace_id: str | None = None,
+        timeout: float | None = None,
     ) -> SseStream:
         """GET /v1/apps/:id/realtime — scope `apps:read`. The only SSE route in the catalog. No
         automatic reconnection — the stream closes when the connection ends or via `.close()`.
+        Events: `logs`, `next_logs`, `system`, `heartbeat` and, with `metrics=True`, `metrics`
+        (`SseEvent.live_metrics()` parses its `data`).
         Doc: https://docs.vertracloud.app/api-reference/endpoint/apps/realtime
         """
         return self._c.request_sse(
             f"/v1/apps/{encode_path_param(app_id)}/realtime",
-            query={"since": since, "workspace_id": workspace_id},
+            query={"since": since, "metrics": metrics, "workspace_id": workspace_id},
             timeout=timeout,
         )
 

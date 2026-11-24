@@ -1,15 +1,19 @@
 """Server-Sent Events parser for `apps.realtime` (the only SSE route in the catalog).
 
 Wire format: `event: <name>` and `data: <text>` lines per event, terminated by a blank
-line (the SSE spec). Events seen: `logs`, `system`, `heartbeat`. No automatic reconnection
+line (the SSE spec). Events seen: `logs`, `next_logs`, `system`, `metrics`, `heartbeat`. No automatic reconnection
 is implemented — closing the stream is the caller's responsibility, via `close()` or by
 breaking out of the `for` loop.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import cast
+
+from .types import APIApplicationLiveMetrics
 
 
 @dataclass(frozen=True)
@@ -17,6 +21,12 @@ class SseEvent:
     event: str
     data: str
     id: str | None = None
+
+    def live_metrics(self) -> APIApplicationLiveMetrics:
+        """Parse the `data` of a `metrics` event. Raises `ValueError` for any other event."""
+        if self.event != "metrics":
+            raise ValueError(f"not a metrics event: {self.event!r}")
+        return cast(APIApplicationLiveMetrics, json.loads(self.data))
 
 
 class SseStream:

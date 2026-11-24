@@ -520,3 +520,77 @@ def test_network_has_no_custom_domain_or_dns() -> None:
     client, _ = _client()
     assert not hasattr(client.apps.network, "custom_domain")
     assert not hasattr(client.apps.network, "dns")
+
+
+def test_apps_create_sends_auto_restart_as_a_text_part() -> None:
+    client, transport = _client()
+    client.apps.create({"name": "x", "auto_restart": False}, file=b"zip")
+    call = _call(transport)
+    assert b'name="auto_restart"\r\n\r\nfalse\r\n' in call.body
+
+
+def test_apps_create_sends_auto_restart_true_as_a_text_part() -> None:
+    client, transport = _client()
+    client.apps.create({"name": "x", "auto_restart": True}, file=b"zip")
+    assert b'name="auto_restart"\r\n\r\ntrue\r\n' in _call(transport).body
+
+
+def test_apps_create_omits_auto_restart_when_not_given() -> None:
+    client, transport = _client()
+    client.apps.create({"name": "x"}, file=b"zip")
+    assert b'name="auto_restart"' not in _call(transport).body
+
+
+def test_apps_update_config_sends_auto_restart_at_the_top_level() -> None:
+    client, transport = _client()
+    transport.queue_json({"response": "success"})
+    client.apps.update_config(ID, {"auto_restart": True})
+    assert _body(_call(transport)) == {"auto_restart": True}
+
+
+def test_apps_files_delete_returns_space_released() -> None:
+    client, transport = _client()
+    transport.queue_json({"response": {"space_released": "on_restart"}})
+    result = client.apps.files.delete(ID, path="/log.txt")
+    assert result == {"space_released": "on_restart"}
+
+
+def test_databases_create_returns_the_password_the_api_sends_once() -> None:
+    client, transport = _client()
+    transport.queue_json({"response": {"id": ID, "password": "pw-once"}}, status=201)
+    created = client.databases.create({"name": "meu-db", "type": 1, "ram": 512})
+    assert created["password"] == "pw-once"
+
+
+def test_databases_certificate_reset_returns_host_and_old_host_variables() -> None:
+    client, transport = _client()
+    transport.queue_json(
+        {
+            "response": {
+                "crt": "c",
+                "key": "k",
+                "pem": "p",
+                "restart_required": False,
+                "apps_to_restart": [],
+                "host": "db.ny1.example",
+                "client_variables_with_old_host": [{"app_id": ID2, "key": "DATABASE_URL"}],
+            }
+        }
+    )
+    result = client.databases.credentials.certificate.reset(ID)
+    assert result["client_variables_with_old_host"] == [{"app_id": ID2, "key": "DATABASE_URL"}]
+
+
+def test_metrics_points_carry_events_for_apps_and_databases() -> None:
+    event = {"at": "2026-11-24T12:00:00.000Z", "kind": "crash", "out_of_memory": True}
+    client, transport = _client()
+    transport.queue_json(
+        {"response": [{"cpu": 1, "ram": 2, "storage": 3, "date": "d", "network": [1, 2], "events": [event]}]}
+    )
+    transport.queue_json(
+        {"response": [{"cpu": 1, "ram": 2, "storage": 3, "date": "d", "network": [1, 2], "events": []}]}
+    )
+    app_points = client.apps.metrics(ID)
+    db_points = client.databases.metrics(ID)
+    assert app_points[0]["events"] == [event]
+    assert db_points[0]["events"] == []

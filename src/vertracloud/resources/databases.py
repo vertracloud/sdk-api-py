@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ..client import encode_path_param
 from ..types import (
@@ -10,6 +10,7 @@ from ..types import (
     APIDatabaseCertificate,
     APIDatabaseCertificateReset,
     APIDatabaseCreated,
+    APIDatabaseMetrics,
     APIDatabasePasswordReset,
     APIDatabaseReset,
     APIDatabaseStatus,
@@ -42,7 +43,9 @@ class DatabaseCertificateResource:
     def reset(self, db_id: str, *, workspace_id: str | None = None) -> APIDatabaseCertificateReset:
         """POST /v1/databases/:id/credentials/certificate/reset — scope `databases:credentials`. Besides the new
         certificate, the answer lists the apps of stacks connected to the database that must restart to read it
-        (`restart_required`, `apps_to_restart`)."""
+        (`restart_required`, `apps_to_restart`). On a database with `legacy_host: True` the new certificate moves it to
+        the current address, which is done only from the dashboard: with an API key this call fails with 403
+        `WEBSITE_ONLY`."""
         return self._c.request_json(
             "POST",
             f"/v1/databases/{encode_path_param(db_id)}/credentials/certificate/reset",
@@ -100,7 +103,7 @@ class DatabasesResource:
             "GET", f"/v1/databases/{encode_path_param(db_id)}/status", query={"workspace_id": workspace_id}
         )
 
-    def metrics(self, db_id: str, *, workspace_id: str | None = None) -> list[Any]:
+    def metrics(self, db_id: str, *, workspace_id: str | None = None) -> list[APIDatabaseMetrics]:
         """GET /v1/databases/:id/metrics — scope `databases:read`. JSON, not SSE."""
         return self._c.request_json(
             "GET", f"/v1/databases/{encode_path_param(db_id)}/metrics", query={"workspace_id": workspace_id}

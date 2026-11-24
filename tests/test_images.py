@@ -358,6 +358,7 @@ def test_apps_create_from_image_posts_json_body_to_apps_image_route() -> None:
         "port": 8080,
         "envs": [{"key": "K", "value": "V"}],
         "workspace_id": ID2,
+        "auto_restart": False,
     }
     client.apps.create_from_image(body)
     call = transport.calls[0]
