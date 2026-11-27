@@ -85,9 +85,6 @@ class CreateAppBody(TypedDict, total=False):
     region: RegionId
     """Region to create the app in. Omitted, the account's default region is used; a region with `available: False`
     fails with `REGION_NOT_AVAILABLE`."""
-    node: NodeId
-    """Server of the region. Only accounts allowed to choose it can send it (`NODE_NOT_ALLOWED` otherwise); a server
-    of another region fails with `NODE_NOT_IN_REGION`. Omitted, the platform picks one."""
 
 
 ApplicationZeroDowntime = Literal["auto", "on", "off"]
@@ -229,8 +226,6 @@ class CreateDatabaseBody(_CreateDatabaseBodyRequired, total=False):
     snapshot_id: str
     region: RegionId
     """Region to create the database in (same rules as `CreateAppBody.region`)."""
-    node: NodeId
-    """Server of the region (same rules as `CreateAppBody.node`)."""
     version: str
     """Engine major line (see `databases.versions()`). Omitted, the recommended one is used; with
     `snapshot_id`, omit it to keep the snapshot's line (an older one fails with `SNAPSHOT_VERSION_NEWER`,
@@ -530,17 +525,16 @@ class APIApplicationDomainConnect(TypedDict):
     url: str
 
 
-# -- regions and nodes: `region`/`node` on create ---------------------------
+# -- regions: `region` on create, `region`/`node` in responses ---------------------------
 
 RegionId = Literal["ny", "sp"]
-NodeId = str
-"""Server of a region (`ny1`, `ny2`, `sp1`): the region id followed by a number. Picked by the platform on creation."""
 
 
 class _APIApplicationRequired(TypedDict):
     id: str
     region: RegionId
-    node: NodeId
+    node: str
+    """Name of the server that runs the resource (for example `amethyst`)."""
     type: int
     name: str
     owner_id: str
@@ -846,7 +840,8 @@ APIRuntimesResponse = dict[str, APIRuntimeEntry]
 class _APIDatabaseRequired(TypedDict):
     id: str
     region: RegionId
-    node: NodeId
+    node: str
+    """Name of the server that runs the resource (for example `amethyst`)."""
     type: int
     name: str
     description: str
@@ -1753,8 +1748,6 @@ class CreateAppFromImageBody(_CreateAppFromImageRequired, total=False):
     auto_restart: bool
     region: RegionId
     """Same rules as `CreateAppBody.region`."""
-    node: NodeId
-    """Same rules as `CreateAppBody.node`."""
 
 
 # -- Templates and stacks: `templates.*`, `stacks.*` ----------------------------------------------

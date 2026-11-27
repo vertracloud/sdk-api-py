@@ -80,10 +80,8 @@ SNAPSHOT_RATE_LIMITED = "SNAPSHOT_RATE_LIMITED"  # 429; `details`: `scope`, `ret
 # -- restore as a job, operations blocked by a snapshot
 RESTORE_COOLDOWN = "RESTORE_COOLDOWN"  # 429: the wait between restores or rollbacks; `RateLimitError.retry_after`
 RESTORE_IN_PROGRESS = "RESTORE_IN_PROGRESS"  # 409: a restore is running on the resource; reads still work
-# -- regions (`region`/`node` on create)
+# -- regions (`region` on create)
 REGION_NOT_AVAILABLE = "REGION_NOT_AVAILABLE"  # 400; the region is not available to the account, or has no room now
-NODE_NOT_ALLOWED = "NODE_NOT_ALLOWED"  # 403; the account cannot choose the server
-NODE_NOT_IN_REGION = "NODE_NOT_IN_REGION"  # 400; the server does not belong to the region, or takes no new resources
 SNAPSHOT_EXCEEDS_STORAGE = "SNAPSHOT_EXCEEDS_STORAGE"  # 400; `VertraAPIError.snapshot_exceeds_storage`
 SNAPSHOT_CORRUPTED = "SNAPSHOT_CORRUPTED"  # 422: nothing was changed
 SNAPSHOT_IMPORT_FAILED = "SNAPSHOT_IMPORT_FAILED"
