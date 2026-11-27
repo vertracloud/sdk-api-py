@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/vertracloud/sdk-api-py/compare/v0.4.4...v0.5.0) (2026-11-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* the create bodies of apps, apps from image and databases no longer take node, and the NODE_NOT_ALLOWED / NODE_NOT_IN_REGION codes were removed. node in responses is the server name (str).
+* cluster was removed from APIApplication and APIDatabase.
+
+### Features
+
+* node removed from creation params ([e8acf00](https://github.com/vertracloud/sdk-api-py/commit/e8acf0056359f50167533d08c28c1c1d8eaf832c))
+* region and node replace cluster ([7bdc46c](https://github.com/vertracloud/sdk-api-py/commit/7bdc46c1aee07ce501eadf62004ee5baf29a39d8))
+
 ## [0.4.4](https://github.com/vertracloud/sdk-api-py/compare/v0.4.3...v0.4.4) (2026-11-24)
 
 
