@@ -36,9 +36,7 @@ def test_apps_create_from_image_and_databases_create_send_region_in_json() -> No
     transport = FakeTransport()
     transport.queue_json({"response": {"id": ID}}, 202)
     client = _client(transport)
-    client.apps.create_from_image(
-        {"image_id": ID, "name": "x", "memory": 512, "web": False, "region": "ny"}
-    )
+    client.apps.create_from_image({"image_id": ID, "name": "x", "memory": 512, "web": False, "region": "ny"})
     transport.queue_json({"response": {"id": ID}}, 201)
     client.databases.create({"name": "db", "ram": 512, "type": 1, "region": "sp"})
     assert json.loads(transport.calls[0].body)["region"] == "ny"
